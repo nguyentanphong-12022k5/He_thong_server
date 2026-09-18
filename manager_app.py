@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import messagebox, scrolledtext
+from tkinter import ttk, messagebox, scrolledtext
 import subprocess
 import threading
 import time
@@ -12,11 +12,46 @@ MAX_EMPTY_TIME = 20  # phút
 RCON_PASSWORD = "super_secret_rcon_password_123"
 CONTAINER_NAME = "mc-server"
 
+COMPOSE_TEMPLATE = """services:
+  mc-server:
+    image: itzg/minecraft-server
+    container_name: mc-server
+    environment:
+      EULA: "TRUE"
+      TYPE: "{server_type}"
+      VERSION: "{server_version}"
+      INIT_MEMORY: "1G"
+      MAX_MEMORY: "{ram_size}G"
+      USE_AIKAR_FLAGS: "true"
+      ENABLE_RCON: "TRUE"
+      RCON_PASSWORD: "super_secret_rcon_password_123"
+      RCON_PORT: 25575
+    ports:
+      - "25565:25565"
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: {ram_limit}G
+
+  playit:
+    image: ghcr.io/playit-cloud/playit-agent:latest
+    container_name: mc-playit
+    network_mode: "service:mc-server"
+    volumes:
+      - ./playit-data:/data
+    restart: unless-stopped
+    depends_on:
+      - mc-server
+"""
+
 class MinecraftServerManager(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Minecraft Smart Server Manager")
-        self.geometry("600x400")
+        self.geometry("700x600")
         self.configure(bg="#2b2b2b")
         
         self.empty_time = 0
@@ -39,41 +74,102 @@ class MinecraftServerManager(tk.Tk):
             self.btn_stop.config(state=tk.DISABLED)
 
     def create_widgets(self):
-        # Frame Buttons
-        btn_frame = tk.Frame(self, bg="#2b2b2b")
-        btn_frame.pack(pady=10)
+        # Style cho Label và text
+        style = ttk.Style()
+        style.theme_use('clam')
+        style.configure("TLabel", background="#2b2b2b", foreground="white", font=("Arial", 10))
+        
+        # === Khung Cấu hình (Config Frame) ===
+        config_frame = tk.LabelFrame(self, text=" Cấu hình Máy chủ ", bg="#2b2b2b", fg="white", font=("Arial", 10, "bold"))
+        config_frame.pack(fill="x", padx=10, pady=10)
 
-        self.btn_start = tk.Button(btn_frame, text=" Bật Server ", font=("Arial", 12, "bold"), bg="#4CAF50", fg="white", command=self.start_server)
+        # Loại Server
+        ttk.Label(config_frame, text="Loại Server:").grid(row=0, column=0, padx=10, pady=5, sticky="e")
+        self.type_var = tk.StringVar(value="PAPER")
+        self.combo_type = ttk.Combobox(config_frame, textvariable=self.type_var, values=["PAPER", "FABRIC", "FORGE", "VANILLA"], state="readonly", width=15)
+        self.combo_type.grid(row=0, column=1, padx=10, pady=5, sticky="w")
+
+        # Phiên bản
+        ttk.Label(config_frame, text="Phiên bản:").grid(row=0, column=2, padx=10, pady=5, sticky="e")
+        self.version_var = tk.StringVar(value="LATEST")
+        self.combo_version = ttk.Combobox(config_frame, textvariable=self.version_var, values=["LATEST", "1.21.1", "1.20.4", "1.19.4", "1.18.2", "1.12.2"], width=15)
+        self.combo_version.grid(row=0, column=3, padx=10, pady=5, sticky="w")
+
+        # RAM Slider
+        ttk.Label(config_frame, text="RAM (GB):").grid(row=1, column=0, padx=10, pady=10, sticky="e")
+        self.ram_var = tk.IntVar(value=4)
+        self.scale_ram = tk.Scale(config_frame, from_=2, to=16, orient="horizontal", variable=self.ram_var, bg="#2b2b2b", fg="white", highlightthickness=0, length=200)
+        self.scale_ram.grid(row=1, column=1, columnspan=3, padx=10, pady=5, sticky="w")
+
+        # === Khung Nút Bấm (Button Frame) ===
+        btn_frame = tk.Frame(self, bg="#2b2b2b")
+        btn_frame.pack(pady=5)
+
+        self.btn_start = tk.Button(btn_frame, text=" Bật Server ", font=("Arial", 11, "bold"), bg="#4CAF50", fg="white", command=self.start_server, width=15)
         self.btn_start.grid(row=0, column=0, padx=10)
 
-        self.btn_stop = tk.Button(btn_frame, text=" Tắt Server ", font=("Arial", 12, "bold"), bg="#f44336", fg="white", command=self.stop_server)
+        self.btn_stop = tk.Button(btn_frame, text=" Tắt Server ", font=("Arial", 11, "bold"), bg="#f44336", fg="white", command=self.stop_server, width=15)
         self.btn_stop.grid(row=0, column=1, padx=10)
 
-        self.btn_mod = tk.Button(btn_frame, text=" Mở Thư mục Mod/Data ", font=("Arial", 12), bg="#2196F3", fg="white", command=self.open_data_folder)
+        self.btn_mod = tk.Button(btn_frame, text=" Mở Data/Mod ", font=("Arial", 11), bg="#2196F3", fg="white", command=self.open_data_folder, width=15)
         self.btn_mod.grid(row=0, column=2, padx=10)
 
-        # Log Text Box
-        self.log_box = scrolledtext.ScrolledText(self, width=70, height=15, bg="#1e1e1e", fg="#00ff00", font=("Consolas", 10))
-        self.log_box.pack(padx=10, pady=10)
+        # === Khung Nhập Lệnh (Console Frame) ===
+        cmd_frame = tk.Frame(self, bg="#2b2b2b")
+        cmd_frame.pack(fill="x", padx=10, pady=5)
+        
+        ttk.Label(cmd_frame, text="Nhập lệnh (/):").pack(side="left", padx=(0, 5))
+        self.cmd_entry = tk.Entry(cmd_frame, font=("Consolas", 11), width=45)
+        self.cmd_entry.pack(side="left", padx=5)
+        self.cmd_entry.bind("<Return>", lambda event: self.send_command()) # Hỗ trợ nhấn Enter
+        
+        self.btn_send = tk.Button(cmd_frame, text="Gửi", bg="#FF9800", fg="white", font=("Arial", 9, "bold"), command=self.send_command)
+        self.btn_send.pack(side="left", padx=5)
+
+        # === Khung Log ===
+        self.log_box = scrolledtext.ScrolledText(self, width=80, height=15, bg="#1e1e1e", fg="#00ff00", font=("Consolas", 10))
+        self.log_box.pack(padx=10, pady=10, expand=True, fill="both")
 
     def log(self, message):
         self.log_box.insert(tk.END, message + "\n")
         self.log_box.see(tk.END)
+        
+    def generate_docker_compose(self):
+        # Tạo nội dung docker-compose.yml dựa trên UI
+        s_type = self.type_var.get()
+        s_version = self.version_var.get()
+        ram = self.ram_var.get()
+        limit = ram + 1 # Cấp dư cho docker 1GB để khỏi crash
+
+        content = COMPOSE_TEMPLATE.format(
+            server_type=s_type,
+            server_version=s_version,
+            ram_size=ram,
+            ram_limit=limit
+        )
+        
+        with open("docker-compose.yml", "w", encoding="utf-8") as f:
+            f.write(content)
+        self.log(f"Đã lưu cấu hình: {s_type} {s_version} - {ram}GB RAM")
 
     def start_server(self):
+        # 1. Ghi đè file compose
+        self.generate_docker_compose()
+        
         self.log("Đang khởi động Server qua Docker Compose...")
         self.btn_start.config(state=tk.DISABLED)
+        self.combo_type.config(state=tk.DISABLED)
+        self.combo_version.config(state=tk.DISABLED)
+        self.scale_ram.config(state=tk.DISABLED)
         
         def run_compose():
             try:
-                # Chạy docker-compose up
                 process = subprocess.Popen(["docker-compose", "up", "-d"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
                 stdout, stderr = process.communicate()
                 if process.returncode == 0:
                     self.log("Máy chủ đã bật thành công!")
-                    self.log("Vui lòng xem log mc-playit bằng lệnh: docker logs mc-playit để lấy link cấu hình mạng.")
+                    self.log("Vui lòng xem log Playit bằng lệnh: docker logs mc-playit (nếu chưa cấu hình mạng).")
                     
-                    # Bắt đầu Watchdog
                     if not self.watchdog_running:
                         self.watchdog_running = True
                         threading.Thread(target=self.watchdog_thread, daemon=True).start()
@@ -92,12 +188,10 @@ class MinecraftServerManager(tk.Tk):
         
         def run_stop():
             try:
-                # Gửi lệnh save-all trước nếu container đang chạy
                 self.log("Gửi lệnh lưu game (save-all)...")
                 subprocess.run(["docker", "exec", "-i", CONTAINER_NAME, "rcon-cli", "--password", RCON_PASSWORD, "save-all"], capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
                 time.sleep(3)
                 
-                # Tắt docker-compose
                 self.log("Đang dừng Docker container...")
                 process = subprocess.Popen(["docker-compose", "stop"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
                 stdout, stderr = process.communicate()
@@ -109,12 +203,40 @@ class MinecraftServerManager(tk.Tk):
                 self.log(f"Lỗi: {e}")
             finally:
                 self.btn_stop.config(state=tk.NORMAL)
-                self.watchdog_running = False # Dừng watchdog
+                self.watchdog_running = False
+                
+                # Mở khóa các tùy chọn cấu hình
+                self.combo_type.config(state="readonly")
+                self.combo_version.config(state="normal")
+                self.scale_ram.config(state="normal")
 
         threading.Thread(target=run_stop, daemon=True).start()
+        
+    def send_command(self):
+        cmd = self.cmd_entry.get().strip()
+        if not cmd:
+            return
+            
+        # Loại bỏ dấu / ở đầu nếu người dùng lỡ nhập
+        if cmd.startswith("/"):
+            cmd = cmd[1:]
+            
+        self.cmd_entry.delete(0, tk.END)
+        self.log(f"> /{cmd}")
+        
+        def run_cmd():
+            try:
+                result = subprocess.run(["docker", "exec", "-i", CONTAINER_NAME, "rcon-cli", "--password", RCON_PASSWORD, cmd], capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
+                if result.stdout:
+                    self.log(f"[Console] {result.stdout.strip()}")
+                if result.stderr:
+                    self.log(f"[Console Error] {result.stderr.strip()}")
+            except Exception as e:
+                self.log(f"Không thể gửi lệnh. Đảm bảo server đang chạy. Lỗi: {e}")
+                
+        threading.Thread(target=run_cmd, daemon=True).start()
 
     def open_data_folder(self):
-        # Tạo thư mục data nếu chưa có
         data_path = os.path.abspath("data")
         if not os.path.exists(data_path):
             os.makedirs(data_path)
@@ -125,19 +247,16 @@ class MinecraftServerManager(tk.Tk):
         self.empty_time = 0
         
         while self.watchdog_running:
-            time.sleep(60) # Chờ 1 phút
+            time.sleep(60)
             if not self.watchdog_running:
                 break
                 
             try:
-                # Gọi rcon-cli trong container
                 result = subprocess.run(["docker", "exec", "-i", CONTAINER_NAME, "rcon-cli", "--password", RCON_PASSWORD, "list"], capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
                 output = result.stdout
                 
-                # output có dạng "There are 0 of a max of 20 players online: "
                 if "There are" in output and "players online" in output:
                     try:
-                        # Lấy số lượng người chơi
                         parts = output.split(" ")
                         players = int(parts[2])
                         
@@ -156,7 +275,7 @@ class MinecraftServerManager(tk.Tk):
                     except ValueError:
                         pass
             except Exception as e:
-                pass # Bỏ qua lỗi nếu container chưa chạy hẳn
+                pass
 
 if __name__ == "__main__":
     app = MinecraftServerManager()
