@@ -41,11 +41,11 @@ COMPOSE_TEMPLATE = """services:
           memory: {ram_limit}G
 
   playit:
-    image: ghcr.io/playit-cloud/playit-agent:latest
+    image: pepaondrugs/playitgg-docker:latest
     container_name: mc-playit
     network_mode: "service:mc-server"
     volumes:
-      - ./playit-data:/data
+      - ./playit-data:/root/.config/playit_gg
     restart: unless-stopped
     depends_on:
       - mc-server
