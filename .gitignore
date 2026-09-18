@@ -1,0 +1,15 @@
+# Thư mục dữ liệu sinh ra khi chạy Server (Không được đưa lên Git vì rất nặng và chứa map)
+/data/
+/playit-data/
+watchdog.log
+
+# Các thư mục sinh ra khi build file .exe bằng PyInstaller
+/build/
+/dist/
+*.spec
+
+# Các thư mục mặc định của Python/Mac/Windows
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db

@@ -1,0 +1,44 @@
+version: "3.8"
+
+services:
+  mc-server:
+    image: itzg/minecraft-server
+    container_name: mc-server
+    environment:
+      # Chấp nhận EULA của Minecraft (bắt buộc)
+      EULA: "TRUE"
+      # Chọn loại server, mặc định là Paper (có thể đổi thành FABRIC hoặc FORGE)
+      TYPE: PAPER
+      # Phiên bản Minecraft (ví dụ: 1.20.4, hoặc để LATEST)
+      VERSION: LATEST
+      # Tối ưu hóa bộ nhớ RAM (Khuyến nghị ít nhất 4GB cho server nhiều mod)
+      INIT_MEMORY: 2G
+      MAX_MEMORY: 4G
+      # Bật Aikar's Flags để tối ưu hóa Garbage Collection của Java (Giảm lag cho server chơi lâu dài)
+      USE_AIKAR_FLAGS: "true"
+      # Kích hoạt RCON để Watchdog có thể giao tiếp
+      ENABLE_RCON: "TRUE"
+      RCON_PASSWORD: "super_secret_rcon_password_123"
+      # Port RCON
+      RCON_PORT: 25575
+    ports:
+      - "25565:25565"
+    volumes:
+      # Lưu trữ dữ liệu ra ngoài thư mục vật lý ./data
+      - ./data:/data
+    restart: unless-stopped
+    # Giới hạn tài nguyên Docker (Đảm bảo host không bị treo nếu server chiếm quá nhiều RAM)
+    deploy:
+      resources:
+        limits:
+          memory: 5G
+
+  playit:
+    image: playitgg/playit
+    container_name: mc-playit
+    network_mode: "service:mc-server" # Share network với mc-server để không cần port map phức tạp
+    volumes:
+      - ./playit-data:/data
+    restart: unless-stopped
+    depends_on:
+      - mc-server
