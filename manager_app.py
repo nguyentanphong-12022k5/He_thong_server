@@ -9,6 +9,12 @@ import sys
 import urllib.request
 import urllib.parse
 import json
+import ssl
+
+# Bỏ qua xác thực SSL để sửa lỗi CERTIFICATE_VERIFY_FAILED trên Windows
+ssl_ctx = ssl.create_default_context()
+ssl_ctx.check_hostname = False
+ssl_ctx.verify_mode = ssl.CERT_NONE
 
 # Cấu hình Watchdog
 MAX_EMPTY_TIME = 20  # phút
@@ -433,7 +439,7 @@ class MinecraftServerManager(tk.Tk):
                 try:
                     url = f"https://api.modrinth.com/v2/search?query={urllib.parse.quote(query)}&limit=15"
                     req = urllib.request.Request(url, headers={'User-Agent': 'MinecraftSmartManager/1.0'})
-                    with urllib.request.urlopen(req) as res:
+                    with urllib.request.urlopen(req, context=ssl_ctx) as res:
                         data = json.loads(res.read().decode())
                         
                     projects.clear()
@@ -470,7 +476,7 @@ class MinecraftServerManager(tk.Tk):
                     # Lấy danh sách version
                     url = f"https://api.modrinth.com/v2/project/{proj_id}/version"
                     req = urllib.request.Request(url, headers={'User-Agent': 'MinecraftSmartManager/1.0'})
-                    with urllib.request.urlopen(req) as res:
+                    with urllib.request.urlopen(req, context=ssl_ctx) as res:
                         versions = json.loads(res.read().decode())
                         
                     if not versions:
@@ -494,7 +500,9 @@ class MinecraftServerManager(tk.Tk):
                     
                     # Tải file
                     self.log(f"[Cửa Hàng] Đang tải {proj_title}...")
-                    urllib.request.urlretrieve(file_url, dest_path)
+                    dl_req = urllib.request.Request(file_url, headers={'User-Agent': 'MinecraftSmartManager/1.0'})
+                    with urllib.request.urlopen(dl_req, context=ssl_ctx) as response, open(dest_path, 'wb') as out_file:
+                        out_file.write(response.read())
                     
                     self.log(f"[Cửa Hàng] Tải thành công: {file_name} vào thư mục {dest_dir}!")
                     store_win.after(0, lambda: messagebox.showinfo("Thành công", f"Đã tải {file_name} thành công!\n(Hãy Khởi động lại Server để áp dụng)"))
