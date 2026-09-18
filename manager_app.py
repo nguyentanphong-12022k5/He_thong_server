@@ -125,14 +125,17 @@ class MinecraftServerManager(tk.Tk):
         btn_frame = tk.Frame(self, bg="#2b2b2b")
         btn_frame.pack(pady=5)
 
-        self.btn_start = tk.Button(btn_frame, text=" Bật Server ", font=("Arial", 11, "bold"), bg="#4CAF50", fg="white", command=self.start_server, width=15)
-        self.btn_start.grid(row=0, column=0, padx=10)
+        self.btn_start = tk.Button(btn_frame, text=" Bật Server ", font=("Arial", 11, "bold"), bg="#4CAF50", fg="white", command=self.start_server, width=12)
+        self.btn_start.grid(row=0, column=0, padx=5)
 
-        self.btn_stop = tk.Button(btn_frame, text=" Tắt Server ", font=("Arial", 11, "bold"), bg="#f44336", fg="white", command=self.stop_server, width=15)
-        self.btn_stop.grid(row=0, column=1, padx=10)
+        self.btn_stop = tk.Button(btn_frame, text=" Tắt Server ", font=("Arial", 11, "bold"), bg="#f44336", fg="white", command=self.stop_server, width=12)
+        self.btn_stop.grid(row=0, column=1, padx=5)
 
-        self.btn_mod = tk.Button(btn_frame, text=" Mở Data/Mod ", font=("Arial", 11), bg="#2196F3", fg="white", command=self.open_data_folder, width=15)
-        self.btn_mod.grid(row=0, column=2, padx=10)
+        self.btn_mod = tk.Button(btn_frame, text=" Mở Data/Mod ", font=("Arial", 11), bg="#2196F3", fg="white", command=self.open_data_folder, width=12)
+        self.btn_mod.grid(row=0, column=2, padx=5)
+
+        self.btn_playit = tk.Button(btn_frame, text=" Lấy IP (Mạng) ", font=("Arial", 11), bg="#9C27B0", fg="white", command=lambda: webbrowser.open("https://playit.gg/manage"), width=12)
+        self.btn_playit.grid(row=0, column=3, padx=5)
 
         # === Khung Nhập Lệnh (Console Frame) ===
         cmd_frame = tk.Frame(self, bg="#2b2b2b")
