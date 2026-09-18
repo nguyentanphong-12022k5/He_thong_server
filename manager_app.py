@@ -199,8 +199,10 @@ class MinecraftServerManager(tk.Tk):
         self.lbl_ram.pack(side="left", padx=5)
 
     def log(self, message):
-        self.log_box.insert(tk.END, message + "\n")
-        self.log_box.see(tk.END)
+        def _log():
+            self.log_box.insert(tk.END, message + "\n")
+            self.log_box.see(tk.END)
+        self.after(0, _log)
         
     def update_player_ui(self, player_names):
         self.list_players.delete(0, tk.END)
@@ -470,8 +472,9 @@ class MinecraftServerManager(tk.Tk):
             proj = projects[sel[0]]
             proj_id = proj.get("project_id")
             proj_title = proj.get("title")
+            server_type = self.type_var.get()
             
-            def do_download():
+            def do_download(s_type):
                 try:
                     # Lấy danh sách version
                     url = f"https://api.modrinth.com/v2/project/{proj_id}/version"
@@ -489,8 +492,7 @@ class MinecraftServerManager(tk.Tk):
                     file_name = file_info["filename"]
                     
                     # Xác định thư mục
-                    server_type = self.type_var.get()
-                    if server_type == "PAPER":
+                    if s_type == "PAPER":
                         dest_dir = os.path.join("data", "plugins")
                     else:
                         dest_dir = os.path.join("data", "mods")
@@ -510,7 +512,7 @@ class MinecraftServerManager(tk.Tk):
                     self.log(f"[Cửa Hàng] Lỗi tải: {e}")
                     store_win.after(0, lambda err=e: messagebox.showerror("Lỗi tải", f"Đã có lỗi xảy ra: {err}"))
             
-            threading.Thread(target=do_download, daemon=True).start()
+            threading.Thread(target=do_download, args=(server_type,), daemon=True).start()
             
         btn_dl = tk.Button(store_win, text="⬇ Tải Về & Cài Đặt", font=("Arial", 11, "bold"), bg="#4CAF50", fg="white", command=on_download)
         btn_dl.pack(pady=10)
