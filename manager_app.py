@@ -23,6 +23,10 @@ COMPOSE_TEMPLATE = """services:
       INIT_MEMORY: "1G"
       MAX_MEMORY: "{ram_size}G"
       USE_AIKAR_FLAGS: "true"
+      ONLINE_MODE: "{online_mode}"
+      PVP: "{pvp}"
+      ENABLE_COMMAND_BLOCK: "{command_blocks}"
+      MAX_PLAYERS: "{max_players}"
       ENABLE_RCON: "TRUE"
       RCON_PASSWORD: "super_secret_rcon_password_123"
       RCON_PORT: 25575
@@ -51,11 +55,12 @@ class MinecraftServerManager(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Minecraft Smart Server Manager")
-        self.geometry("700x600")
+        self.geometry("700x750") # Tăng chiều cao để chứa thêm khung mới
         self.configure(bg="#2b2b2b")
         
         self.empty_time = 0
         self.watchdog_running = False
+        self.claimed_links = set()
 
         self.create_widgets()
         self.check_docker()
@@ -78,28 +83,43 @@ class MinecraftServerManager(tk.Tk):
         style = ttk.Style()
         style.theme_use('clam')
         style.configure("TLabel", background="#2b2b2b", foreground="white", font=("Arial", 10))
+        style.configure("TCheckbutton", background="#2b2b2b", foreground="white")
         
-        # === Khung Cấu hình (Config Frame) ===
+        # === Khung Cấu hình Server (Hardware) ===
         config_frame = tk.LabelFrame(self, text=" Cấu hình Máy chủ ", bg="#2b2b2b", fg="white", font=("Arial", 10, "bold"))
-        config_frame.pack(fill="x", padx=10, pady=10)
+        config_frame.pack(fill="x", padx=10, pady=5)
 
-        # Loại Server
         ttk.Label(config_frame, text="Loại Server:").grid(row=0, column=0, padx=10, pady=5, sticky="e")
         self.type_var = tk.StringVar(value="PAPER")
         self.combo_type = ttk.Combobox(config_frame, textvariable=self.type_var, values=["PAPER", "FABRIC", "FORGE", "VANILLA"], state="readonly", width=15)
         self.combo_type.grid(row=0, column=1, padx=10, pady=5, sticky="w")
 
-        # Phiên bản
         ttk.Label(config_frame, text="Phiên bản:").grid(row=0, column=2, padx=10, pady=5, sticky="e")
         self.version_var = tk.StringVar(value="LATEST")
         self.combo_version = ttk.Combobox(config_frame, textvariable=self.version_var, values=["LATEST", "1.21.1", "1.20.4", "1.19.4", "1.18.2", "1.12.2"], width=15)
         self.combo_version.grid(row=0, column=3, padx=10, pady=5, sticky="w")
 
-        # RAM Slider
         ttk.Label(config_frame, text="RAM (GB):").grid(row=1, column=0, padx=10, pady=10, sticky="e")
         self.ram_var = tk.IntVar(value=4)
         self.scale_ram = tk.Scale(config_frame, from_=2, to=16, orient="horizontal", variable=self.ram_var, bg="#2b2b2b", fg="white", highlightthickness=0, length=200)
         self.scale_ram.grid(row=1, column=1, columnspan=3, padx=10, pady=5, sticky="w")
+
+        # === Khung Cài đặt Trò chơi (Properties) ===
+        prop_frame = tk.LabelFrame(self, text=" Cài đặt Trò chơi (Properties) ", bg="#2b2b2b", fg="white", font=("Arial", 10, "bold"))
+        prop_frame.pack(fill="x", padx=10, pady=5)
+
+        self.crack_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(prop_frame, text="Cho phép bản Crack (Online Mode = False)", variable=self.crack_var).grid(row=0, column=0, padx=10, pady=5, sticky="w")
+
+        self.pvp_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(prop_frame, text="Bật PVP (Đánh nhau)", variable=self.pvp_var).grid(row=0, column=1, padx=10, pady=5, sticky="w")
+
+        self.cmd_block_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(prop_frame, text="Bật Command Blocks", variable=self.cmd_block_var).grid(row=1, column=0, padx=10, pady=5, sticky="w")
+
+        ttk.Label(prop_frame, text="Số người chơi tối đa:").grid(row=1, column=1, padx=10, pady=5, sticky="e")
+        self.max_players_var = tk.IntVar(value=20)
+        tk.Entry(prop_frame, textvariable=self.max_players_var, width=5).grid(row=1, column=2, padx=(0,10), pady=5, sticky="w")
 
         # === Khung Nút Bấm (Button Frame) ===
         btn_frame = tk.Frame(self, bg="#2b2b2b")
@@ -121,46 +141,51 @@ class MinecraftServerManager(tk.Tk):
         ttk.Label(cmd_frame, text="Nhập lệnh (/):").pack(side="left", padx=(0, 5))
         self.cmd_entry = tk.Entry(cmd_frame, font=("Consolas", 11), width=45)
         self.cmd_entry.pack(side="left", padx=5)
-        self.cmd_entry.bind("<Return>", lambda event: self.send_command()) # Hỗ trợ nhấn Enter
+        self.cmd_entry.bind("<Return>", lambda event: self.send_command())
         
         self.btn_send = tk.Button(cmd_frame, text="Gửi", bg="#FF9800", fg="white", font=("Arial", 9, "bold"), command=self.send_command)
         self.btn_send.pack(side="left", padx=5)
 
         # === Khung Log ===
         self.log_box = scrolledtext.ScrolledText(self, width=80, height=15, bg="#1e1e1e", fg="#00ff00", font=("Consolas", 10))
-        self.log_box.pack(padx=10, pady=10, expand=True, fill="both")
+        self.log_box.pack(padx=10, pady=5, expand=True, fill="both")
 
     def log(self, message):
         self.log_box.insert(tk.END, message + "\n")
         self.log_box.see(tk.END)
         
     def generate_docker_compose(self):
-        # Tạo nội dung docker-compose.yml dựa trên UI
         s_type = self.type_var.get()
         s_version = self.version_var.get()
         ram = self.ram_var.get()
-        limit = ram + 1 # Cấp dư cho docker 1GB để khỏi crash
+        limit = ram + 1
+
+        # Properties
+        online_mode = "FALSE" if self.crack_var.get() else "TRUE"
+        pvp = "TRUE" if self.pvp_var.get() else "FALSE"
+        cmd_blocks = "TRUE" if self.cmd_block_var.get() else "FALSE"
+        max_players = str(self.max_players_var.get())
 
         content = COMPOSE_TEMPLATE.format(
             server_type=s_type,
             server_version=s_version,
             ram_size=ram,
-            ram_limit=limit
+            ram_limit=limit,
+            online_mode=online_mode,
+            pvp=pvp,
+            command_blocks=cmd_blocks,
+            max_players=max_players
         )
         
         with open("docker-compose.yml", "w", encoding="utf-8") as f:
             f.write(content)
-        self.log(f"Đã lưu cấu hình: {s_type} {s_version} - {ram}GB RAM")
+        self.log(f"Đã cập nhật cấu hình và thuộc tính Game!")
 
     def start_server(self):
-        # 1. Ghi đè file compose
         self.generate_docker_compose()
         
         self.log("Đang khởi động Server qua Docker Compose...")
         self.btn_start.config(state=tk.DISABLED)
-        self.combo_type.config(state=tk.DISABLED)
-        self.combo_version.config(state=tk.DISABLED)
-        self.scale_ram.config(state=tk.DISABLED)
         
         def run_compose():
             try:
@@ -168,11 +193,11 @@ class MinecraftServerManager(tk.Tk):
                 stdout, stderr = process.communicate()
                 if process.returncode == 0:
                     self.log("Máy chủ đã bật thành công!")
-                    self.log("Vui lòng xem log Playit bằng lệnh: docker logs mc-playit (nếu chưa cấu hình mạng).")
                     
                     if not self.watchdog_running:
                         self.watchdog_running = True
                         threading.Thread(target=self.watchdog_thread, daemon=True).start()
+                        threading.Thread(target=self.playit_scanner_thread, daemon=True).start()
                 else:
                     self.log(f"Lỗi khi bật máy chủ:\n{stderr}")
             except Exception as e:
@@ -181,6 +206,34 @@ class MinecraftServerManager(tk.Tk):
                 self.btn_start.config(state=tk.NORMAL)
 
         threading.Thread(target=run_compose, daemon=True).start()
+
+    def playit_scanner_thread(self):
+        self.log("[Mạng] Bắt đầu quét đường dẫn Playit tự động...")
+        time.sleep(5) # Đợi container chạy lên
+        try:
+            process = subprocess.Popen(["docker", "logs", "-f", "mc-playit"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
+            
+            for line in process.stdout:
+                if not self.watchdog_running:
+                    break
+                
+                # Tìm link claim tài khoản
+                if "https://playit.gg/claim/" in line:
+                    start = line.find("https://playit.gg/claim/")
+                    end = line.find(" ", start)
+                    if end == -1: end = len(line)
+                    link = line[start:end].strip()
+                    
+                    if link not in self.claimed_links:
+                        self.claimed_links.add(link)
+                        self.log(f"\n[MẠNG] Đã bắt được Link xác thực Playit! Đang mở trình duyệt...\n👉 {link}\n")
+                        webbrowser.open(link)
+                
+                # Bắt IP/Domain nếu hiển thị trong log
+                if "tunnel running" in line.lower() or "allocated" in line.lower():
+                    pass # Ở đây có thể phân tích thêm IP tùy thuộc định dạng log mới nhất của playit
+        except Exception as e:
+            pass
 
     def stop_server(self):
         self.log("Đang tiến hành lưu map và tắt server...")
@@ -204,11 +257,6 @@ class MinecraftServerManager(tk.Tk):
             finally:
                 self.btn_stop.config(state=tk.NORMAL)
                 self.watchdog_running = False
-                
-                # Mở khóa các tùy chọn cấu hình
-                self.combo_type.config(state="readonly")
-                self.combo_version.config(state="normal")
-                self.scale_ram.config(state="normal")
 
         threading.Thread(target=run_stop, daemon=True).start()
         
@@ -217,7 +265,6 @@ class MinecraftServerManager(tk.Tk):
         if not cmd:
             return
             
-        # Loại bỏ dấu / ở đầu nếu người dùng lỡ nhập
         if cmd.startswith("/"):
             cmd = cmd[1:]
             
