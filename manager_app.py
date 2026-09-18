@@ -55,8 +55,15 @@ class MinecraftServerManager(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Minecraft Smart Server Manager")
-        self.geometry("700x750") # Tăng chiều cao để chứa thêm khung mới
+        self.geometry("850x750") 
         self.configure(bg="#2b2b2b")
+        
+        # Load Icon
+        try:
+            if os.path.exists("icon.ico"):
+                self.iconbitmap("icon.ico")
+        except:
+            pass
         
         self.empty_time = 0
         self.watchdog_running = False
@@ -79,7 +86,6 @@ class MinecraftServerManager(tk.Tk):
             self.btn_stop.config(state=tk.DISABLED)
 
     def create_widgets(self):
-        # Style cho Label và text
         style = ttk.Style()
         style.theme_use('clam')
         style.configure("TLabel", background="#2b2b2b", foreground="white", font=("Arial", 10))
@@ -133,7 +139,7 @@ class MinecraftServerManager(tk.Tk):
 
         self.btn_mod = tk.Button(btn_frame, text=" Mở Data/Mod ", font=("Arial", 11), bg="#2196F3", fg="white", command=self.open_data_folder, width=12)
         self.btn_mod.grid(row=0, column=2, padx=5)
-
+        
         self.btn_playit = tk.Button(btn_frame, text=" Lấy IP (Mạng) ", font=("Arial", 11), bg="#9C27B0", fg="white", command=lambda: webbrowser.open("https://playit.gg/manage"), width=12)
         self.btn_playit.grid(row=0, column=3, padx=5)
 
@@ -149,13 +155,30 @@ class MinecraftServerManager(tk.Tk):
         self.btn_send = tk.Button(cmd_frame, text="Gửi", bg="#FF9800", fg="white", font=("Arial", 9, "bold"), command=self.send_command)
         self.btn_send.pack(side="left", padx=5)
 
-        # === Khung Log ===
-        self.log_box = scrolledtext.ScrolledText(self, width=80, height=15, bg="#1e1e1e", fg="#00ff00", font=("Consolas", 10))
-        self.log_box.pack(padx=10, pady=5, expand=True, fill="both")
+        # === Khung Hiển thị Trạng thái (Log & Player List) ===
+        status_frame = tk.Frame(self, bg="#2b2b2b")
+        status_frame.pack(fill="both", expand=True, padx=10, pady=5)
+        
+        # Log Box
+        self.log_box = scrolledtext.ScrolledText(status_frame, bg="#1e1e1e", fg="#00ff00", font=("Consolas", 10))
+        self.log_box.pack(side="left", expand=True, fill="both", padx=(0, 5))
+        
+        # Player List Box
+        player_frame = tk.LabelFrame(status_frame, text=" Người Chơi Online ", bg="#2b2b2b", fg="white", font=("Arial", 10, "bold"))
+        player_frame.pack(side="right", fill="y", padx=(5, 0))
+        
+        self.list_players = tk.Listbox(player_frame, bg="#1e1e1e", fg="yellow", font=("Consolas", 11), width=20)
+        self.list_players.pack(expand=True, fill="both", padx=5, pady=5)
 
     def log(self, message):
         self.log_box.insert(tk.END, message + "\n")
         self.log_box.see(tk.END)
+        
+    def update_player_ui(self, player_names):
+        self.list_players.delete(0, tk.END)
+        for name in player_names:
+            if name.strip():
+                self.list_players.insert(tk.END, name.strip())
         
     def generate_docker_compose(self):
         s_type = self.type_var.get()
@@ -163,7 +186,6 @@ class MinecraftServerManager(tk.Tk):
         ram = self.ram_var.get()
         limit = ram + 1
 
-        # Properties
         online_mode = "FALSE" if self.crack_var.get() else "TRUE"
         pvp = "TRUE" if self.pvp_var.get() else "FALSE"
         cmd_blocks = "TRUE" if self.cmd_block_var.get() else "FALSE"
@@ -212,7 +234,7 @@ class MinecraftServerManager(tk.Tk):
 
     def playit_scanner_thread(self):
         self.log("[Mạng] Bắt đầu quét đường dẫn Playit tự động...")
-        time.sleep(5) # Đợi container chạy lên
+        time.sleep(5)
         try:
             process = subprocess.Popen(["docker", "logs", "-f", "mc-playit"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
             
@@ -220,7 +242,6 @@ class MinecraftServerManager(tk.Tk):
                 if not self.watchdog_running:
                     break
                 
-                # Tìm link claim tài khoản
                 if "https://playit.gg/claim/" in line:
                     start = line.find("https://playit.gg/claim/")
                     end = line.find(" ", start)
@@ -231,10 +252,6 @@ class MinecraftServerManager(tk.Tk):
                         self.claimed_links.add(link)
                         self.log(f"\n[MẠNG] Đã bắt được Link xác thực Playit! Đang mở trình duyệt...\n👉 {link}\n")
                         webbrowser.open(link)
-                
-                # Bắt IP/Domain nếu hiển thị trong log
-                if "tunnel running" in line.lower() or "allocated" in line.lower():
-                    pass # Ở đây có thể phân tích thêm IP tùy thuộc định dạng log mới nhất của playit
         except Exception as e:
             pass
 
@@ -253,6 +270,7 @@ class MinecraftServerManager(tk.Tk):
                 stdout, stderr = process.communicate()
                 if process.returncode == 0:
                     self.log("Đã tắt máy chủ thành công!")
+                    self.after(0, self.update_player_ui, []) # Xoa danh sach
                 else:
                     self.log(f"Lỗi khi tắt:\n{stderr}")
             except Exception as e:
@@ -303,12 +321,23 @@ class MinecraftServerManager(tk.Tk):
                 
             try:
                 result = subprocess.run(["docker", "exec", "-i", CONTAINER_NAME, "rcon-cli", "--password", RCON_PASSWORD, "list"], capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
-                output = result.stdout
+                output = result.stdout.strip()
                 
                 if "There are" in output and "players online" in output:
                     try:
+                        # Parse count
                         parts = output.split(" ")
                         players = int(parts[2])
+                        
+                        # Parse names
+                        player_names = []
+                        if ":" in output:
+                            names_str = output.split(":")[1].strip()
+                            if names_str:
+                                player_names = names_str.split(",")
+                        
+                        # Cap nhat UI danh sach
+                        self.after(0, self.update_player_ui, player_names)
                         
                         if players == 0:
                             self.empty_time += 1
