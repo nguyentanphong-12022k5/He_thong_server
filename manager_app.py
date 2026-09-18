@@ -140,7 +140,7 @@ class MinecraftServerManager(tk.Tk):
         self.btn_mod = tk.Button(btn_frame, text=" Mở Data/Mod ", font=("Arial", 11), bg="#2196F3", fg="white", command=self.open_data_folder, width=12)
         self.btn_mod.grid(row=0, column=2, padx=5)
         
-        self.btn_playit = tk.Button(btn_frame, text=" Lấy IP (Mạng) ", font=("Arial", 11), bg="#9C27B0", fg="white", command=lambda: webbrowser.open("https://playit.gg/manage"), width=12)
+        self.btn_playit = tk.Button(btn_frame, text=" Lấy IP (Mạng) ", font=("Arial", 11), bg="#9C27B0", fg="white", command=lambda: webbrowser.open("https://playit.gg/account"), width=12)
         self.btn_playit.grid(row=0, column=3, padx=5)
 
         # === Khung Nhập Lệnh (Console Frame) ===
