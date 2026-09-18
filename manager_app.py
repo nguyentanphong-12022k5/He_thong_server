@@ -6,6 +6,9 @@ import time
 import os
 import webbrowser
 import sys
+import urllib.request
+import urllib.parse
+import json
 
 # Cấu hình Watchdog
 MAX_EMPTY_TIME = 20  # phút
@@ -55,7 +58,7 @@ class MinecraftServerManager(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Minecraft Smart Server Manager")
-        self.geometry("850x750") 
+        self.geometry("850x800") 
         self.configure(bg="#2b2b2b")
         
         # Load Icon
@@ -142,6 +145,9 @@ class MinecraftServerManager(tk.Tk):
         
         self.btn_playit = tk.Button(btn_frame, text=" Lấy IP (Mạng) ", font=("Arial", 11), bg="#9C27B0", fg="white", command=lambda: webbrowser.open("https://playit.gg/account"), width=12)
         self.btn_playit.grid(row=0, column=3, padx=5)
+        
+        self.btn_store = tk.Button(btn_frame, text=" 🛒 Cửa hàng Mod ", font=("Arial", 11, "bold"), bg="#FF9800", fg="white", command=self.open_mod_store, width=15)
+        self.btn_store.grid(row=0, column=4, padx=5)
 
         # === Khung Nhập Lệnh (Console Frame) ===
         cmd_frame = tk.Frame(self, bg="#2b2b2b")
@@ -170,6 +176,22 @@ class MinecraftServerManager(tk.Tk):
         self.list_players = tk.Listbox(player_frame, bg="#1e1e1e", fg="yellow", font=("Consolas", 11), width=20)
         self.list_players.pack(expand=True, fill="both", padx=5, pady=5)
 
+        # === Khung Hiệu Năng (Performance Monitor) ===
+        perf_frame = tk.Frame(self, bg="#2b2b2b")
+        perf_frame.pack(fill="x", padx=10, pady=5)
+        
+        ttk.Label(perf_frame, text="CPU:").pack(side="left", padx=(0, 5))
+        self.cpu_bar = ttk.Progressbar(perf_frame, orient="horizontal", length=200, mode="determinate")
+        self.cpu_bar.pack(side="left", padx=5)
+        self.lbl_cpu = ttk.Label(perf_frame, text="0%")
+        self.lbl_cpu.pack(side="left", padx=(0, 20))
+        
+        ttk.Label(perf_frame, text="RAM:").pack(side="left", padx=(0, 5))
+        self.ram_bar = ttk.Progressbar(perf_frame, orient="horizontal", length=200, mode="determinate")
+        self.ram_bar.pack(side="left", padx=5)
+        self.lbl_ram = ttk.Label(perf_frame, text="0%")
+        self.lbl_ram.pack(side="left", padx=5)
+
     def log(self, message):
         self.log_box.insert(tk.END, message + "\n")
         self.log_box.see(tk.END)
@@ -179,7 +201,13 @@ class MinecraftServerManager(tk.Tk):
         for name in player_names:
             if name.strip():
                 self.list_players.insert(tk.END, name.strip())
-        
+                
+    def update_perf_ui(self, cpu_val, ram_val):
+        self.cpu_bar["value"] = min(cpu_val, 100)
+        self.lbl_cpu.config(text=f"{cpu_val:.1f}%")
+        self.ram_bar["value"] = min(ram_val, 100)
+        self.lbl_ram.config(text=f"{ram_val:.1f}%")
+
     def generate_docker_compose(self):
         s_type = self.type_var.get()
         s_version = self.version_var.get()
@@ -270,7 +298,8 @@ class MinecraftServerManager(tk.Tk):
                 stdout, stderr = process.communicate()
                 if process.returncode == 0:
                     self.log("Đã tắt máy chủ thành công!")
-                    self.after(0, self.update_player_ui, []) # Xoa danh sach
+                    self.after(0, self.update_player_ui, []) 
+                    self.after(0, self.update_perf_ui, 0.0, 0.0)
                 else:
                     self.log(f"Lỗi khi tắt:\n{stderr}")
             except Exception as e:
@@ -311,50 +340,172 @@ class MinecraftServerManager(tk.Tk):
         os.startfile(data_path)
 
     def watchdog_thread(self):
-        self.log("Watchdog (Tự động tắt) đã khởi động. Kiểm tra mỗi phút...")
+        self.log("Watchdog và Bộ giám sát hiệu năng đã khởi động...")
         self.empty_time = 0
         
+        last_check_time = time.time()
+        
         while self.watchdog_running:
-            time.sleep(60)
+            time.sleep(2)
             if not self.watchdog_running:
                 break
                 
+            # Lấy thông số CPU/RAM
             try:
-                result = subprocess.run(["docker", "exec", "-i", CONTAINER_NAME, "rcon-cli", "--password", RCON_PASSWORD, "list"], capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
-                output = result.stdout.strip()
-                
-                if "There are" in output and "players online" in output:
-                    try:
-                        # Parse count
-                        parts = output.split(" ")
-                        players = int(parts[2])
-                        
-                        # Parse names
-                        player_names = []
-                        if ":" in output:
-                            names_str = output.split(":")[1].strip()
-                            if names_str:
-                                player_names = names_str.split(",")
-                        
-                        # Cap nhat UI danh sach
-                        self.after(0, self.update_player_ui, player_names)
-                        
-                        if players == 0:
-                            self.empty_time += 1
-                            self.log(f"[Watchdog] Server đang trống ({self.empty_time}/{MAX_EMPTY_TIME} phút).")
-                            
-                            if self.empty_time >= MAX_EMPTY_TIME:
-                                self.log("[Watchdog] Đã quá thời gian trống cho phép. Tự động tắt server!")
-                                self.stop_server()
-                                break
-                        else:
-                            if self.empty_time > 0:
-                                self.log(f"[Watchdog] Có {players} người chơi. Đã reset bộ đếm.")
-                            self.empty_time = 0
-                    except ValueError:
-                        pass
-            except Exception as e:
+                stats_res = subprocess.run(["docker", "stats", "--no-stream", "--format", "json", CONTAINER_NAME], capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
+                if stats_res.stdout:
+                    # Output form: {"CPUPerc":"0.05%","MemPerc":"1.2%"}
+                    lines = stats_res.stdout.strip().split("\n")
+                    if lines:
+                        data = json.loads(lines[0])
+                        cpu_perc = float(data.get("CPUPerc", "0%").strip('%'))
+                        mem_perc = float(data.get("MemPerc", "0%").strip('%'))
+                        self.after(0, self.update_perf_ui, cpu_perc, mem_perc)
+            except Exception:
                 pass
+                
+            # Kiểm tra số người chơi mỗi 60s
+            current_time = time.time()
+            if current_time - last_check_time >= 60:
+                last_check_time = current_time
+                try:
+                    result = subprocess.run(["docker", "exec", "-i", CONTAINER_NAME, "rcon-cli", "--password", RCON_PASSWORD, "list"], capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
+                    output = result.stdout.strip()
+                    
+                    if "There are" in output and "players online" in output:
+                        try:
+                            parts = output.split(" ")
+                            players = int(parts[2])
+                            
+                            player_names = []
+                            if ":" in output:
+                                names_str = output.split(":")[1].strip()
+                                if names_str:
+                                    player_names = names_str.split(",")
+                            
+                            self.after(0, self.update_player_ui, player_names)
+                            
+                            if players == 0:
+                                self.empty_time += 1
+                                self.log(f"[Watchdog] Server đang trống ({self.empty_time}/{MAX_EMPTY_TIME} phút).")
+                                
+                                if self.empty_time >= MAX_EMPTY_TIME:
+                                    self.log("[Watchdog] Đã quá thời gian trống cho phép. Tự động tắt server!")
+                                    self.stop_server()
+                                    break
+                            else:
+                                if self.empty_time > 0:
+                                    self.log(f"[Watchdog] Có {players} người chơi. Đã reset bộ đếm.")
+                                self.empty_time = 0
+                        except ValueError:
+                            pass
+                except Exception:
+                    pass
+
+    # === Cửa hàng Mod/Plugin ===
+    def open_mod_store(self):
+        store_win = tk.Toplevel(self)
+        store_win.title("Cửa hàng Modrinth")
+        store_win.geometry("500x500")
+        store_win.configure(bg="#2b2b2b")
+        
+        ttk.Label(store_win, text="Tìm kiếm Mod/Plugin:").pack(pady=(10, 0))
+        
+        search_frame = tk.Frame(store_win, bg="#2b2b2b")
+        search_frame.pack(fill="x", padx=10, pady=5)
+        
+        search_var = tk.StringVar()
+        search_entry = tk.Entry(search_frame, textvariable=search_var, font=("Arial", 11), width=40)
+        search_entry.pack(side="left", padx=5)
+        
+        list_results = tk.Listbox(store_win, font=("Arial", 10), height=15)
+        list_results.pack(fill="both", expand=True, padx=10, pady=5)
+        
+        projects = [] # Lưu project metadata
+        
+        def on_search():
+            query = search_var.get().strip()
+            if not query: return
+            list_results.delete(0, tk.END)
+            list_results.insert(tk.END, "Đang tìm kiếm...")
+            
+            def do_search():
+                try:
+                    url = f"https://api.modrinth.com/v2/search?query={urllib.parse.quote(query)}&limit=15"
+                    req = urllib.request.Request(url, headers={'User-Agent': 'MinecraftSmartManager/1.0'})
+                    with urllib.request.urlopen(req) as res:
+                        data = json.loads(res.read().decode())
+                        
+                    projects.clear()
+                    store_win.after(0, lambda: list_results.delete(0, tk.END))
+                    for hit in data.get("hits", []):
+                        projects.append(hit)
+                        title = hit.get("title", "Unknown")
+                        author = hit.get("author", "Unknown")
+                        store_win.after(0, lambda t=title, a=author: list_results.insert(tk.END, f"{t} (bởi {a})"))
+                        
+                    if not projects:
+                        store_win.after(0, lambda: list_results.insert(tk.END, "Không tìm thấy kết quả nào."))
+                except Exception as e:
+                    store_win.after(0, lambda: list_results.insert(tk.END, f"Lỗi: {e}"))
+                    
+            threading.Thread(target=do_search, daemon=True).start()
+            
+        btn_search = tk.Button(search_frame, text="Tìm", bg="#2196F3", fg="white", command=on_search)
+        btn_search.pack(side="left")
+        search_entry.bind("<Return>", lambda e: on_search())
+        
+        def on_download():
+            sel = list_results.curselection()
+            if not sel:
+                messagebox.showinfo("Thông báo", "Vui lòng chọn 1 Mod/Plugin trong danh sách!")
+                return
+                
+            proj = projects[sel[0]]
+            proj_id = proj.get("project_id")
+            proj_title = proj.get("title")
+            
+            def do_download():
+                try:
+                    # Lấy danh sách version
+                    url = f"https://api.modrinth.com/v2/project/{proj_id}/version"
+                    req = urllib.request.Request(url, headers={'User-Agent': 'MinecraftSmartManager/1.0'})
+                    with urllib.request.urlopen(req) as res:
+                        versions = json.loads(res.read().decode())
+                        
+                    if not versions:
+                        store_win.after(0, lambda: messagebox.showerror("Lỗi", "Không tìm thấy file nào cho Project này!"))
+                        return
+                        
+                    # Lấy file đầu tiên (mới nhất)
+                    file_info = versions[0]["files"][0]
+                    file_url = file_info["url"]
+                    file_name = file_info["filename"]
+                    
+                    # Xác định thư mục
+                    server_type = self.type_var.get()
+                    if server_type == "PAPER":
+                        dest_dir = os.path.join("data", "plugins")
+                    else:
+                        dest_dir = os.path.join("data", "mods")
+                        
+                    os.makedirs(dest_dir, exist_ok=True)
+                    dest_path = os.path.join(dest_dir, file_name)
+                    
+                    # Tải file
+                    self.log(f"[Cửa Hàng] Đang tải {proj_title}...")
+                    urllib.request.urlretrieve(file_url, dest_path)
+                    
+                    self.log(f"[Cửa Hàng] Tải thành công: {file_name} vào thư mục {dest_dir}!")
+                    store_win.after(0, lambda: messagebox.showinfo("Thành công", f"Đã tải {file_name} thành công!\n(Hãy Khởi động lại Server để áp dụng)"))
+                except Exception as e:
+                    self.log(f"[Cửa Hàng] Lỗi tải: {e}")
+                    store_win.after(0, lambda err=e: messagebox.showerror("Lỗi tải", f"Đã có lỗi xảy ra: {err}"))
+            
+            threading.Thread(target=do_download, daemon=True).start()
+            
+        btn_dl = tk.Button(store_win, text="⬇ Tải Về & Cài Đặt", font=("Arial", 11, "bold"), bg="#4CAF50", fg="white", command=on_download)
+        btn_dl.pack(pady=10)
 
 if __name__ == "__main__":
     app = MinecraftServerManager()
