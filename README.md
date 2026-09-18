@@ -1,47 +1,55 @@
-# Minecraft Smart Server Management (App Edition)
+# Minecraft Smart Server Management (Bản Chuẩn - V3)
 
-Hệ thống quản lý máy chủ Minecraft tự động với giao diện trực quan (GUI) trên Windows. Hệ thống sử dụng Docker để cô lập môi trường, hỗ trợ kết nối mạng vượt NAT (qua Playit.gg) và tự động tắt khi không có người chơi.
+Hệ thống quản lý máy chủ Minecraft tự động với giao diện trực quan (GUI) thân thiện dành cho Windows. Hệ thống sử dụng Docker để cô lập môi trường, tự động hóa mọi thiết lập (RAM, Properties) và tích hợp mạng xuyên NAT Playit.gg siêu tiện lợi.
 
-## Tính năng chính
-1. **Giao diện App (GUI)**: Mọi thao tác Bật/Tắt server, xem log, mở thư mục Mod đều được thực hiện qua một cửa sổ ứng dụng duy nhất, không cần gõ lệnh.
-2. **Kiểm tra Docker thông minh**: Tự động cảnh báo và dẫn link tải Docker Desktop nếu người dùng chưa cài đặt.
-3. **Quản lý Mod/Plugin**: Hỗ trợ Paper, Fabric, Forge. Mở nhanh thư mục mod từ giao diện App.
-4. **Kết nối Cross-Network**: Sử dụng [Playit.gg](https://playit.gg) để mở mạng ra ngoài mà không cần cấu hình Port Forwarding.
-5. **Auto-shutdown (Watchdog)**: App chạy ngầm tính năng kiểm tra người chơi. Nếu server trống liên tục 20 phút, App sẽ tự động lưu map (save-all) và tắt hệ thống để tiết kiệm tài nguyên.
+## Tính năng nổi bật
+1. **Giao diện App (GUI) Toàn năng**: Không cần đụng vào file code! Chọn Loại Server (Paper/Forge/Fabric), Phiên bản, RAM và Các thuộc tính Game (Crack, PVP, Max Players) ngay trên App.
+2. **Auto-Playit (Tự bắt Link Mạng)**: App sẽ tự đọc Log và **mở trình duyệt web xác thực** ngay khi Playit.gg sẵn sàng.
+3. **Bảng Điều Khiển Console (Khung Lệnh)**: Gõ lệnh trực tiếp vào Server (như `/op`, `/time`) thông qua ô nhập lệnh trên giao diện.
+4. **Watchdog Thông Minh**: Tự động giám sát số lượng người chơi và tự động lưu Map rồi tắt máy chủ nếu không có ai chơi trong 20 phút.
 
 ---
 
-## 1. Yêu cầu hệ thống
-- Hệ điều hành: Windows 10/11.
-- Phần mềm: **[Docker Desktop](https://www.docker.com/products/docker-desktop/)** (Bắt buộc phải cài và đang mở chạy ngầm).
+## 📖 Hướng Dẫn Sử Dụng (Từ A - Z)
 
-## 2. Hướng dẫn sử dụng App
+### Bước 1: Yêu cầu bắt buộc (Prerequisites)
+- Máy tính chạy Windows 10/11.
+- Máy tính (người làm Host) **BẮT BUỘC** phải cài đặt phần mềm **[Docker Desktop](https://www.docker.com/products/docker-desktop/)** và đang bật nó chạy ngầm.
 
-Nếu bạn nhận được file nén chứa `manager_app.exe` và `docker-compose.yml`, hãy làm theo các bước sau:
+### Bước 2: Khởi chạy Ứng dụng Quản lý (App)
+Nếu bạn nhận được file nén chứa `manager_app.exe` và `docker-compose.yml`, hãy để chúng ở chung một thư mục.
+- Click đúp vào file **`manager_app.exe`** để mở bảng điều khiển.
 
-1. Chạy phần mềm Docker Desktop trên máy tính của bạn trước.
-2. Click đúp vào file **`manager_app.exe`** để mở bảng điều khiển (Control Panel).
-3. Bấm nút **Bật Server** (Màu xanh). Đợi một lúc để hệ thống tự động tải dữ liệu và khởi động.
-4. Quan sát khung Log. Ở lần chạy đầu tiên, bạn sẽ thấy một thông báo yêu cầu xác thực Playit.gg. 
-   - Hãy copy đường link xác thực đó và dán vào trình duyệt web.
-   - Đăng nhập/Đăng ký Playit.gg và cấu hình mạng (như cấp IP tĩnh `tencuaban.auto.playit.gg`).
-   - Gửi IP này cho bạn bè để họ vào game.
+### Bước 3: Cấu hình Server (Chỉ 5 giây)
+Trên giao diện App:
+1. Chọn **Loại Server** (Ví dụ: `PAPER` nếu muốn cài Plugin, `FORGE` nếu cài Mod nặng).
+2. Chọn **Phiên bản** (Ví dụ: `1.20.4`).
+3. Kéo thanh **RAM** (Khuyến nghị để 4GB trở lên).
+4. **Cài đặt Game (Properties):** 
+   - Nếu bạn và bạn bè chơi qua TLauncher/Legacy Launcher (Crack), **BẮT BUỘC phải TÍCH vào ô "Cho phép bản Crack (Online Mode = False)"**.
+5. Bấm nút **Bật Server** (Màu Xanh).
 
-## 3. Quản lý Mod/Plugin và Dữ liệu
-Toàn bộ map (world), mod, và plugin được lưu trực tiếp vào thư mục `data` nằm chung chỗ với file App.
+### Bước 4: Mở Mạng cho Bạn Bè (Playit.gg)
+1. Sau khi bấm Bật Server, hãy chờ khoảng 1-2 phút. Khung Log của App sẽ báo `[Mạng] Bắt đầu quét...`
+2. Vài giây sau, **trình duyệt Web của bạn sẽ tự động bật lên** trang `playit.gg`.
+3. Bạn tiến hành Đăng nhập (hoặc Đăng ký) tài khoản Playit.
+4. Chọn "Add Agent" -> Làm theo chỉ dẫn để lấy được địa chỉ IP Tĩnh dạng chữ (Ví dụ: `hoat-hinh.auto.playit.gg`).
+*(Lưu ý: App lưu cấu hình mạng vào thư mục `playit-data`. Lần sau bật lại App, bạn sẽ không cần phải quét hay xác thực link nữa, IP tĩnh vẫn giữ nguyên).*
 
-1. Từ giao diện App, bấm nút **Mở Thư mục Mod/Data** (Màu xanh dương).
-2. Tùy thuộc vào loại server (Paper/Fabric/Forge) được thiết lập trong file `docker-compose.yml`, bạn hãy thả các file `.jar` vào thư mục `data/plugins/` hoặc `data/mods/`.
-3. Nếu muốn đổi loại server (VD: từ Paper sang Fabric):
-   - Mở file `docker-compose.yml` bằng Notepad.
-   - Tìm dòng `TYPE: PAPER` và đổi thành `TYPE: FABRIC`.
-   - Tắt server và bật lại từ App.
+### Bước 5: Cách vào Game (Dành cho bản Crack/Legacy Launcher)
+1. Mở phần mềm Legacy Launcher.
+2. Ở ô Tên người dùng, nhập tên viết liền không dấu (Vd: `TuanMinh99`).
+3. Ở ô Phiên bản, hãy chọn phiên bản **khớp chính xác 100%** với cấu hình bạn chọn ở Bước 3. (Vd: Ở App chọn FORGE 1.20.4 thì Legacy cũng phải chọn Forge 1.20.4).
+4. Vào Game -> Multiplayer (Chơi mạng) -> Add Server (Thêm máy chủ).
+5. Dán địa chỉ IP Tĩnh (`hoat-hinh.auto.playit.gg`) vào ô Server Address và vào chơi!
 
-## 4. Dành cho lập trình viên (Cách Build file .exe)
+---
 
-Nếu bạn có mã nguồn gốc (`manager_app.py`, `build.bat`) và muốn tự xuất ra file `.exe`:
+## 🛠 Hướng dẫn cho Lập Trình Viên (Cách Build file .exe)
 
-1. Máy tính cần cài đặt sẵn **Python** (Check mục "Add to PATH" khi cài).
+Nếu bạn có mã nguồn gốc (`manager_app.py`, `build.bat`) và muốn tự đóng gói ra file `.exe`:
+
+1. Máy tính cần cài đặt sẵn **Python**.
 2. Click đúp vào file **`build.bat`**.
-3. Kịch bản sẽ tự tải thư viện `PyInstaller` và biên dịch mã nguồn.
-4. Sau khi xong, vào thư mục `dist` mới xuất hiện, bạn sẽ thấy file `.exe` của mình ở đó. Copy nó ra ngoài và gửi cho bạn bè (cùng với `docker-compose.yml`).
+3. Hệ thống sẽ tự cài `PyInstaller` và biên dịch mã nguồn.
+4. Sau khi xong, vào thư mục `dist`, bạn sẽ thấy file `.exe` của mình ở đó. Copy nó ra ngoài và gửi cho bạn bè (nhớ gửi kèm file `docker-compose.yml`).
