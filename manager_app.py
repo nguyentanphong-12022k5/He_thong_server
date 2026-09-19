@@ -380,20 +380,29 @@ class MinecraftServerManager(tk.Tk):
                     result = subprocess.run(["docker", "exec", "-i", CONTAINER_NAME, "rcon-cli", "--password", RCON_PASSWORD, "list"], capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
                     output = result.stdout.strip()
                     
-                    if "There are" in output and "players online" in output:
+                    import re
+                    
+                    if "players online" in output.lower() or "online:" in output.lower():
                         try:
-                            parts = output.split(" ")
-                            players = int(parts[2])
-                            
+                            # Tìm số lượng người chơi (thường nằm sau chữ 'are' hoặc đứng trước chữ 'out of' / 'of a max')
+                            # Ví dụ: "There are 1 of a max of 20 players online" -> bắt số 1
+                            match = re.search(r'(?:There are |online: )(\d+)', output, re.IGNORECASE)
+                            if match:
+                                players = int(match.group(1))
+                            else:
+                                # Fallback nếu không bắt được
+                                players = 1 if ":" in output and len(output.split(":")[1].strip()) > 0 else 0
+                                
+                            # Cố gắng bắt danh sách tên người chơi sau dấu hai chấm
                             player_names = []
                             if ":" in output:
-                                names_str = output.split(":")[1].strip()
+                                names_str = output.split(":", 1)[1].strip()
                                 if names_str:
-                                    player_names = names_str.split(",")
+                                    player_names = [n.strip() for n in names_str.split(",") if n.strip()]
                             
                             self.after(0, self.update_player_ui, player_names)
                             
-                            if players == 0:
+                            if len(player_names) == 0 and players == 0:
                                 self.empty_time += 1
                                 self.log(f"[Watchdog] Server đang trống ({self.empty_time}/{MAX_EMPTY_TIME} phút).")
                                 
