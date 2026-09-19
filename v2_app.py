@@ -39,6 +39,7 @@ COMPOSE_TEMPLATE = """services:
       PVP: "{pvp}"
       DIFFICULTY: "{difficulty}"
       ENABLE_RCON: "TRUE"
+      {modpack_env}
       RCON_PASSWORD: "super_secret_rcon_password_123"
       RCON_PORT: 25575
     ports:
@@ -143,6 +144,8 @@ class ServerManagerWindow(ctk.CTkToplevel):
         os.startfile(self.instance_dir)
         
     def generate_compose(self):
+        modpack = self.profile.get('modpack', '').strip()
+        modpack_env = f'MODRINTH_MODPACK: "{modpack}"' if modpack else ""
         content = COMPOSE_TEMPLATE.format(
             server_id=self.server_id,
             server_type=self.profile['type'],
@@ -151,7 +154,8 @@ class ServerManagerWindow(ctk.CTkToplevel):
             ram=self.profile.get('ram', '4G'),
             online_mode=self.profile.get('online_mode', 'FALSE'),
             pvp=self.profile.get('pvp', 'true'),
-            difficulty=self.profile.get('difficulty', 'easy')
+            difficulty=self.profile.get('difficulty', 'easy'),
+            modpack_env=modpack_env
         )
         with open(os.path.join(self.instance_dir, "docker-compose.yml"), "w", encoding="utf-8") as f:
             f.write(content)
@@ -480,26 +484,30 @@ class MinecraftManagerV2(ctk.CTk):
     def create_server_dialog(self):
         dialog = ctk.CTkToplevel(self)
         dialog.title("Tạo Máy Chủ Mới")
-        dialog.geometry("400x500")
+        dialog.geometry("450x600")
         dialog.attributes("-topmost", True)
         
-        ctk.CTkLabel(dialog, text="Tên Máy Chủ:").pack(pady=(20, 5), padx=20, anchor="w")
-        name_entry = ctk.CTkEntry(dialog, width=300)
+        ctk.CTkLabel(dialog, text="Tên Máy Chủ:").pack(pady=(15, 5), padx=20, anchor="w")
+        name_entry = ctk.CTkEntry(dialog, width=350)
         name_entry.pack(padx=20, anchor="w")
         
-        ctk.CTkLabel(dialog, text="Loại Server (Core):").pack(pady=(15, 5), padx=20, anchor="w")
+        ctk.CTkLabel(dialog, text="Loại Server (Core):").pack(pady=(10, 5), padx=20, anchor="w")
         type_var = ctk.StringVar(value="PAPER")
         type_menu = ctk.CTkOptionMenu(dialog, variable=type_var, values=["PAPER", "FORGE", "FABRIC", "VANILLA"])
         type_menu.pack(padx=20, anchor="w")
         
-        ctk.CTkLabel(dialog, text="Phiên bản:").pack(pady=(15, 5), padx=20, anchor="w")
-        version_entry = ctk.CTkEntry(dialog, width=300, placeholder_text="Ví dụ: 1.20.4, 1.21.1")
+        ctk.CTkLabel(dialog, text="Phiên bản:").pack(pady=(10, 5), padx=20, anchor="w")
+        version_entry = ctk.CTkEntry(dialog, width=350, placeholder_text="Ví dụ: 1.20.4, 1.21.1")
         version_entry.pack(padx=20, anchor="w")
         
-        ctk.CTkLabel(dialog, text="Cổng (Port) Minecraft:").pack(pady=(15, 5), padx=20, anchor="w")
-        port_entry = ctk.CTkEntry(dialog, width=300)
+        ctk.CTkLabel(dialog, text="Cổng (Port) Minecraft:").pack(pady=(10, 5), padx=20, anchor="w")
+        port_entry = ctk.CTkEntry(dialog, width=350)
         port_entry.insert(0, str(25565 + len(self.profiles))) 
         port_entry.pack(padx=20, anchor="w")
+        
+        ctk.CTkLabel(dialog, text="Link Modpack Modrinth (Tùy chọn):", text_color="#FF9800").pack(pady=(15, 5), padx=20, anchor="w")
+        modpack_entry = ctk.CTkEntry(dialog, width=350, placeholder_text="Dán Link hoặc Slug Modpack vào đây...")
+        modpack_entry.pack(padx=20, anchor="w")
         
         def save():
             name = name_entry.get().strip()
@@ -518,6 +526,7 @@ class MinecraftManagerV2(ctk.CTk):
                 "type": type_var.get(),
                 "version": version_entry.get().strip() or "LATEST",
                 "port": port_entry.get().strip() or "25565",
+                "modpack": modpack_entry.get().strip(),
                 "created_at": time.time()
             }
             os.makedirs(os.path.join(self.base_dir, s_id, "data"), exist_ok=True)
