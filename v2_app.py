@@ -41,7 +41,7 @@ COMPOSE_TEMPLATE = """services:
     container_name: mc-playit-{server_id}
     network_mode: "service:mc-server"
     volumes:
-      - ./playit-data:/root/.config/playit_gg
+      - ../../playit-data:/root/.config/playit_gg
     restart: unless-stopped
     depends_on:
       - mc-server
