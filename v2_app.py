@@ -424,11 +424,10 @@ class MinecraftManagerV2(ctk.CTk):
         self.frames["clientsync"] = self.clientsync_frame
         self.setup_clientsync()
 
-        # 4. Dummy Settings Frame
+        # 4. Settings Frame
         self.settings_frame = ctk.CTkFrame(self, corner_radius=10, fg_color="transparent")
         self.frames["settings"] = self.settings_frame
-        ctk.CTkLabel(self.settings_frame, text="Cài Đặt Hệ Thống", font=ctk.CTkFont(size=24, weight="bold")).pack(pady=20, padx=20, anchor="w")
-        ctk.CTkLabel(self.settings_frame, text="Phiên bản: 2.0 (Modern Engine)\nCác cài đặt nâng cao sẽ được thêm trong tương lai.").pack(pady=10)
+        self.setup_settings()
 
         self.select_frame("dashboard")
 
@@ -716,6 +715,34 @@ class MinecraftManagerV2(ctk.CTk):
         shutil.make_archive(zip_name, 'zip', mods_dir)
         messagebox.showinfo("Thành công", f"Đã đóng gói thành công file:\n{zip_name}.zip\n\nHãy gửi file này cho bạn bè nhé!")
         os.startfile(os.getcwd())
+
+    def setup_settings(self):
+        ctk.CTkLabel(self.settings_frame, text="Cài Đặt & Tối Ưu Hệ Thống", font=ctk.CTkFont(size=24, weight="bold")).pack(pady=(20, 10), padx=20, anchor="w")
+        
+        info_frame = ctk.CTkFrame(self.settings_frame, fg_color="transparent")
+        info_frame.pack(fill="x", padx=20, pady=10)
+        ctk.CTkLabel(info_frame, text="Phiên bản: 2.0 (Modern Engine)\nTác giả: DeepMind AI & Bạn").pack(anchor="w")
+        
+        clean_frame = ctk.CTkFrame(self.settings_frame, corner_radius=8, fg_color="#2b2b2b")
+        clean_frame.pack(fill="x", padx=20, pady=20)
+        
+        ctk.CTkLabel(clean_frame, text="🧹 Máy Hút Bụi Server (Docker Cleaner)", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=(15, 5), padx=15, anchor="w")
+        ctk.CTkLabel(clean_frame, text="Xóa các dữ liệu rác, bộ nhớ đệm, và Container không dùng tới để giải phóng ổ cứng C.\n(Không ảnh hưởng đến dữ liệu Map và Server hiện tại của bạn).", text_color="gray", justify="left").pack(padx=15, anchor="w")
+        
+        def run_clean():
+            if not messagebox.askyesno("Xác nhận", "Tính năng này sẽ xóa sạch rác Docker để giải phóng ổ đĩa.\nBạn có muốn tiếp tục?"): return
+            
+            def do_clean():
+                try:
+                    subprocess.run(["docker", "system", "prune", "-a", "-f", "--volumes"], creationflags=subprocess.CREATE_NO_WINDOW)
+                    self.after(0, lambda: messagebox.showinfo("Thành công", "Đã dọn dẹp xong! Ổ đĩa của bạn đã rộng rãi hơn."))
+                except Exception as e:
+                    self.after(0, lambda: messagebox.showerror("Lỗi", f"Không thể dọn dẹp: {e}"))
+                    
+            threading.Thread(target=do_clean, daemon=True).start()
+            messagebox.showinfo("Đang dọn dẹp", "Hệ thống đang tiến hành dọn rác ngầm, có thể mất vài phút. Vui lòng đợi thông báo hoàn tất...")
+            
+        ctk.CTkButton(clean_frame, text="Chạy Dọn Dẹp Ngay", fg_color="#dc3545", hover_color="#c82333", command=run_clean).pack(pady=20, padx=15, anchor="w")
 
 if __name__ == "__main__":
     app = MinecraftManagerV2()
