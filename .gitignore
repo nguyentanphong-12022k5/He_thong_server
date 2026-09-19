@@ -13,3 +13,9 @@ __pycache__/
 *.pyc
 .DS_Store
 Thumbs.db
+
+# V2 App Data
+/instances/
+profiles.json
+*.zip
+docker-compose.yml
