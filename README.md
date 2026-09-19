@@ -1,55 +1,62 @@
-# Minecraft Smart Server Management (Bản Chuẩn - V3)
+# 🎮 Minecraft Smart Server Manager (V2.0)
 
-Hệ thống quản lý máy chủ Minecraft tự động với giao diện trực quan (GUI) thân thiện dành cho Windows. Hệ thống sử dụng Docker để cô lập môi trường, tự động hóa mọi thiết lập (RAM, Properties) và tích hợp mạng xuyên NAT Playit.gg siêu tiện lợi.
+Một phần mềm quản lý Máy chủ Minecraft chuyên nghiệp, giao diện đồ họa hiện đại (CustomTkinter), và hoàn toàn tự động hóa. Công cụ được thiết kế để giúp bất kỳ ai (dù không biết IT) cũng có thể tạo và quản lý máy chủ Minecraft có cài Mod/Modpack dễ dàng thông qua Docker.
 
-## Tính năng nổi bật
-1. **Giao diện App (GUI) Toàn năng**: Không cần đụng vào file code! Chọn Loại Server (Paper/Forge/Fabric), Phiên bản, RAM và Các thuộc tính Game (Crack, PVP, Max Players) ngay trên App.
-2. **Auto-Playit (Tự bắt Link Mạng)**: App sẽ tự đọc Log và **mở trình duyệt web xác thực** ngay khi Playit.gg sẵn sàng.
-3. **Bảng Điều Khiển Console (Khung Lệnh)**: Gõ lệnh trực tiếp vào Server (như `/op`, `/time`) thông qua ô nhập lệnh trên giao diện.
-4. **Watchdog Thông Minh**: Tự động giám sát số lượng người chơi và tự động lưu Map rồi tắt máy chủ nếu không có ai chơi trong 20 phút.
+![Version](https://img.shields.io/badge/Version-2.0-blue.svg)
+![Python](https://img.shields.io/badge/Python-3.10%2B-green.svg)
+![Docker](https://img.shields.io/badge/Docker-Required-blue.svg)
 
 ---
 
-## 📖 Hướng Dẫn Sử Dụng (Từ A - Z)
-
-### Bước 1: Yêu cầu bắt buộc (Prerequisites)
-- Máy tính chạy Windows 10/11.
-- Máy tính (người làm Host) **BẮT BUỘC** phải cài đặt phần mềm **[Docker Desktop](https://www.docker.com/products/docker-desktop/)** và đang bật nó chạy ngầm.
-
-### Bước 2: Khởi chạy Ứng dụng Quản lý (App)
-Nếu bạn nhận được file nén chứa `manager_app.exe` và `docker-compose.yml`, hãy để chúng ở chung một thư mục.
-- Click đúp vào file **`manager_app.exe`** để mở bảng điều khiển.
-
-### Bước 3: Cấu hình Server (Chỉ 5 giây)
-Trên giao diện App:
-1. Chọn **Loại Server** (Ví dụ: `PAPER` nếu muốn cài Plugin, `FORGE` nếu cài Mod nặng).
-2. Chọn **Phiên bản** (Ví dụ: `1.20.4`).
-3. Kéo thanh **RAM** (Khuyến nghị để 4GB trở lên).
-4. **Cài đặt Game (Properties):** 
-   - Nếu bạn và bạn bè chơi qua TLauncher/Legacy Launcher (Crack), **BẮT BUỘC phải TÍCH vào ô "Cho phép bản Crack (Online Mode = False)"**.
-5. Bấm nút **Bật Server** (Màu Xanh).
-
-### Bước 4: Mở Mạng cho Bạn Bè (Playit.gg)
-1. Sau khi bấm Bật Server, hãy chờ khoảng 1-2 phút. Khung Log của App sẽ báo `[Mạng] Bắt đầu quét...`
-2. Vài giây sau, **trình duyệt Web của bạn sẽ tự động bật lên** trang `playit.gg`.
-3. Bạn tiến hành Đăng nhập (hoặc Đăng ký) tài khoản Playit.
-4. Chọn "Add Agent" -> Làm theo chỉ dẫn để lấy được địa chỉ IP Tĩnh dạng chữ (Ví dụ: `hoat-hinh.auto.playit.gg`).
-*(Lưu ý: App lưu cấu hình mạng vào thư mục `playit-data`. Lần sau bật lại App, bạn sẽ không cần phải quét hay xác thực link nữa, IP tĩnh vẫn giữ nguyên).*
-
-### Bước 5: Cách vào Game (Dành cho bản Crack/Legacy Launcher)
-1. Mở phần mềm Legacy Launcher.
-2. Ở ô Tên người dùng, nhập tên viết liền không dấu (Vd: `TuanMinh99`).
-3. Ở ô Phiên bản, hãy chọn phiên bản **khớp chính xác 100%** với cấu hình bạn chọn ở Bước 3. (Vd: Ở App chọn FORGE 1.20.4 thì Legacy cũng phải chọn Forge 1.20.4).
-4. Vào Game -> Multiplayer (Chơi mạng) -> Add Server (Thêm máy chủ).
-5. Dán địa chỉ IP Tĩnh (`hoat-hinh.auto.playit.gg`) vào ô Server Address và vào chơi!
+## ✨ Tính Năng Nổi Bật
+- **🖥️ Giao diện Hiện Đại:** Thiết kế giao diện bóng bẩy với CustomTkinter (Dark Mode mặc định).
+- **🗂️ Quản lý Đa Máy Chủ:** Tạo không giới hạn số lượng Server (Sinh tồn, Modpack, Vanilla...) độc lập nhau.
+- **⚙️ Cài Đặt Chuyên Sâu Trực Quan:** Chỉnh sửa RAM (2G -> 16G), bật/tắt Crack (Online Mode), bật/tắt PVP cực kỳ dễ dàng qua nút gạt.
+- **📦 Cửa Hàng Mod (ModStore):** Tìm kiếm và tải trực tiếp hàng ngàn Mod từ Modrinth. Hệ thống tự động lọc Mod tương thích với Phiên bản và Loại Server (Forge/Fabric).
+- **🚀 1-Click Modpack Installer:** Tích hợp bộ cài Modpack tự động. Chỉ cần dán Link Modpack Modrinth vào lúc tạo Server, phần mềm sẽ tự động tải và cấu hình toàn bộ.
+- **🤝 Chia Sẻ Mod Cho Bạn Bè (ClientSync):** Nén toàn bộ thư mục `mods` của Server thành một file Zip siêu chuẩn chỉ bằng 1 nút bấm để gửi cho bạn bè cài đặt.
+- **🛡️ Playit.gg Tích Hợp Sâu:** Chia sẻ IP tĩnh toàn cầu, bạn bè có thể vào chơi mà không cần bạn mở Port modem (Port Forwarding). Tất cả các Server dùng chung 1 IP tĩnh duy nhất.
+- **🤖 Watchdog Thông Minh:** Tự động giám sát người chơi. Nếu Server trống quá 30 phút, Watchdog sẽ tự động Save game và Tắt Server để tiết kiệm tài nguyên máy tính.
+- **🧹 Máy Hút Bụi Server:** Dọn dẹp rác Docker chỉ với 1 Click.
 
 ---
 
-## 🛠 Hướng dẫn cho Lập Trình Viên (Cách Build file .exe)
+## 🚀 Hướng Dẫn Cài Đặt
 
-Nếu bạn có mã nguồn gốc (`manager_app.py`, `build.bat`) và muốn tự đóng gói ra file `.exe`:
+### Yêu Cầu Hệ Thống:
+1. Máy tính cài đặt sẵn [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Và nhớ bật chạy ngầm Docker).
+2. [Python 3.10+](https://www.python.org/downloads/)
 
-1. Máy tính cần cài đặt sẵn **Python**.
-2. Click đúp vào file **`build.bat`**.
-3. Hệ thống sẽ tự cài `PyInstaller` và biên dịch mã nguồn.
-4. Sau khi xong, vào thư mục `dist`, bạn sẽ thấy file `.exe` của mình ở đó. Copy nó ra ngoài và gửi cho bạn bè (nhớ gửi kèm file `docker-compose.yml`).
+### Bước 1: Tải mã nguồn
+Clone dự án này về máy của bạn:
+```bash
+git clone https://github.com/nguyentanphong-12022k5/He_thong_server.git
+cd He_thong_server
+```
+
+### Bước 2: Cài đặt Thư viện
+```bash
+pip install customtkinter requests urllib3 pyyaml
+```
+
+### Bước 3: Khởi chạy Phần mềm
+Chỉ cần chạy lệnh sau để mở giao diện:
+```bash
+python v2_app.py
+```
+*(Hoặc chạy file `build.bat` để đóng gói phần mềm thành 1 file `.exe` duy nhất có thể gửi cho bạn bè).*
+
+---
+
+## 🕹️ Cách Sử Dụng Căn Bản
+1. **Tạo Server:** Bấm `+ Tạo Server Mới`, chọn Loại Server (Paper/Forge/Fabric), nhập Phiên bản (ví dụ `1.20.1`) và bấm Tạo. *(Nếu muốn chơi Modpack, hãy dán Link Modpack vào ô tùy chọn).*
+2. **Cấu hình:** Bấm vào biểu tượng `🔧 Cài Đặt` để chỉnh RAM cho Server.
+3. **Mở Mạng:** Lần đầu tiên chạy, bạn cần vào `🌐 Lấy IP (Playit)` để xác thực danh tính mạng. Sau đó, máy chủ sẽ có một IP tĩnh cố định (VD: `abc-xyz.auto.playit.gg`) vĩnh viễn.
+4. **Tải Mod:** Qua tab `Cửa Hàng Mod`, tìm Mod muốn cài và ấn Tải Xuống.
+5. **Gửi cho bạn bè:** Qua tab `Đồng Bộ Bạn Bè`, ấn nút Đóng Gói để lấy file Zip gửi cho bạn bè cài vào máy của họ.
+
+---
+
+## 🛠 Tác giả & Bản quyền
+Phát triển bởi **Nguyễn Tấn Phong** kết hợp cùng **Google DeepMind AI**.
+Mã nguồn mở miễn phí. Chúc các bạn có những giờ phút sinh tồn cùng đồng bọn thật vui vẻ! 🎮
