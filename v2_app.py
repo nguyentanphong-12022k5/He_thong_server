@@ -33,9 +33,11 @@ COMPOSE_TEMPLATE = """services:
       TYPE: "{server_type}"
       VERSION: "{server_version}"
       INIT_MEMORY: "1G"
-      MAX_MEMORY: "4G"
+      MAX_MEMORY: "{ram}"
       USE_AIKAR_FLAGS: "true"
-      ONLINE_MODE: "FALSE"
+      ONLINE_MODE: "{online_mode}"
+      PVP: "{pvp}"
+      DIFFICULTY: "{difficulty}"
       ENABLE_RCON: "TRUE"
       RCON_PASSWORD: "super_secret_rcon_password_123"
       RCON_PORT: 25575
@@ -96,6 +98,7 @@ class ServerManagerWindow(ctk.CTkToplevel):
         
         ctk.CTkButton(controls, text="📁 Mở Thư Mục", command=self.open_folder).pack(side="left", padx=5)
         ctk.CTkButton(controls, text="🌐 Lấy IP (Playit)", fg_color="#9C27B0", hover_color="#7B1FA2", command=lambda: webbrowser.open("https://playit.gg/account")).pack(side="left", padx=5)
+        ctk.CTkButton(controls, text="🔧 Cài Đặt", fg_color="#fd7e14", hover_color="#e8590c", command=self.open_settings).pack(side="left", padx=5)
         
         # Console & Khung Log
         log_frame = ctk.CTkFrame(self)
@@ -144,10 +147,48 @@ class ServerManagerWindow(ctk.CTkToplevel):
             server_id=self.server_id,
             server_type=self.profile['type'],
             server_version=self.profile['version'],
-            port=self.profile['port']
+            port=self.profile['port'],
+            ram=self.profile.get('ram', '4G'),
+            online_mode=self.profile.get('online_mode', 'FALSE'),
+            pvp=self.profile.get('pvp', 'true'),
+            difficulty=self.profile.get('difficulty', 'easy')
         )
         with open(os.path.join(self.instance_dir, "docker-compose.yml"), "w", encoding="utf-8") as f:
             f.write(content)
+
+    def open_settings(self):
+        dialog = ctk.CTkToplevel(self)
+        dialog.title(f"Cài đặt: {self.profile['name']}")
+        dialog.geometry("400x450")
+        dialog.attributes("-topmost", True)
+        
+        ctk.CTkLabel(dialog, text="RAM Tối đa:").pack(pady=(20, 5), padx=20, anchor="w")
+        ram_var = ctk.StringVar(value=self.profile.get('ram', '4G'))
+        ctk.CTkOptionMenu(dialog, variable=ram_var, values=["2G", "4G", "6G", "8G", "12G", "16G"]).pack(padx=20, anchor="w")
+        
+        ctk.CTkLabel(dialog, text="Bản quyền (Online Mode):").pack(pady=(15, 5), padx=20, anchor="w")
+        online_var = ctk.StringVar(value=self.profile.get('online_mode', 'FALSE'))
+        ctk.CTkOptionMenu(dialog, variable=online_var, values=["TRUE", "FALSE"]).pack(padx=20, anchor="w")
+        
+        ctk.CTkLabel(dialog, text="Cho phép đánh nhau (PVP):").pack(pady=(15, 5), padx=20, anchor="w")
+        pvp_var = ctk.StringVar(value=self.profile.get('pvp', 'true'))
+        ctk.CTkOptionMenu(dialog, variable=pvp_var, values=["true", "false"]).pack(padx=20, anchor="w")
+        
+        ctk.CTkLabel(dialog, text="Độ khó:").pack(pady=(15, 5), padx=20, anchor="w")
+        diff_var = ctk.StringVar(value=self.profile.get('difficulty', 'easy'))
+        ctk.CTkOptionMenu(dialog, variable=diff_var, values=["peaceful", "easy", "normal", "hard"]).pack(padx=20, anchor="w")
+        
+        def save():
+            self.profile['ram'] = ram_var.get()
+            self.profile['online_mode'] = online_var.get()
+            self.profile['pvp'] = pvp_var.get()
+            self.profile['difficulty'] = diff_var.get()
+            self.master.save_profiles()
+            self.generate_compose()
+            messagebox.showinfo("Thành công", "Đã lưu cài đặt! Vui lòng Tắt và Bật lại Server để áp dụng thay đổi.")
+            dialog.destroy()
+            
+        ctk.CTkButton(dialog, text="Lưu Cài Đặt", command=save, fg_color="#28a745", hover_color="#218838").pack(pady=30)
 
     def start_server(self):
         self.btn_start.configure(state="disabled")
