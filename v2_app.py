@@ -275,7 +275,7 @@ class ServerManagerWindow(ctk.CTkToplevel):
                             self.log(f"[Watchdog] Server đang trống ({self.empty_time}/{MAX_EMPTY_TIME} phút).")
                             if self.empty_time >= MAX_EMPTY_TIME:
                                 self.log("[Watchdog] Đã quá thời gian chờ, tiến hành Auto-Stop!")
-                                self.stop_server()
+                                self.after(0, self.stop_server)
                                 break
                         else:
                             self.empty_time = 0
@@ -464,7 +464,12 @@ class MinecraftManagerV2(ctk.CTk):
         def save():
             name = name_entry.get().strip()
             if not name: return
-            s_id = name.lower().replace(" ", "_")
+            
+            s_id = re.sub(r'[^a-z0-9_]', '', name.lower().replace(" ", "_"))
+            if not s_id:
+                messagebox.showerror("Lỗi", "Tên máy chủ không hợp lệ!")
+                return
+                
             if s_id in self.profiles:
                 messagebox.showerror("Lỗi", "Tên máy chủ này đã tồn tại!")
                 return
