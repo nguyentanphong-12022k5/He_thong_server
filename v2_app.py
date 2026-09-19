@@ -5,11 +5,247 @@ import json
 import os
 import shutil
 import time
-from tkinter import messagebox
+import webbrowser
+import re
+from tkinter import messagebox, scrolledtext
 
 # Configuration
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
+
+RCON_PASSWORD = "super_secret_rcon_password_123"
+
+COMPOSE_TEMPLATE = """services:
+  mc-server:
+    image: itzg/minecraft-server
+    container_name: mc-server-{server_id}
+    environment:
+      EULA: "TRUE"
+      TYPE: "{server_type}"
+      VERSION: "{server_version}"
+      INIT_MEMORY: "1G"
+      MAX_MEMORY: "4G"
+      USE_AIKAR_FLAGS: "true"
+      ONLINE_MODE: "FALSE"
+      ENABLE_RCON: "TRUE"
+      RCON_PASSWORD: "super_secret_rcon_password_123"
+      RCON_PORT: 25575
+    ports:
+      - "{port}:25565"
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
+
+  playit:
+    image: pepaondrugs/playitgg-docker:latest
+    container_name: mc-playit-{server_id}
+    network_mode: "service:mc-server"
+    volumes:
+      - ./playit-data:/root/.config/playit_gg
+    restart: unless-stopped
+    depends_on:
+      - mc-server
+"""
+
+class ServerManagerWindow(ctk.CTkToplevel):
+    def __init__(self, parent, server_id, profile_data, base_dir):
+        super().__init__(parent)
+        self.server_id = server_id
+        self.profile = profile_data
+        self.instance_dir = os.path.abspath(os.path.join(base_dir, server_id))
+        self.container_name = f"mc-server-{server_id}"
+        self.playit_container = f"mc-playit-{server_id}"
+        
+        self.title(f"Quản lý: {self.profile['name']}")
+        self.geometry("900x700")
+        self.attributes("-topmost", True)
+        self.after(200, lambda: self.attributes("-topmost", False))
+        
+        self.watchdog_running = False
+        self.claimed_links = set()
+        
+        self.setup_ui()
+        
+    def setup_ui(self):
+        # Thông tin chung
+        header = ctk.CTkFrame(self)
+        header.pack(fill="x", padx=10, pady=10)
+        
+        info_text = f"⚙️ {self.profile['name']}  |  Core: {self.profile['type']}  |  Version: {self.profile['version']}  |  Port: {self.profile['port']}"
+        ctk.CTkLabel(header, text=info_text, font=ctk.CTkFont(size=16, weight="bold")).pack(side="left", padx=15, pady=15)
+        
+        # Nút điều khiển
+        controls = ctk.CTkFrame(self, fg_color="transparent")
+        controls.pack(fill="x", padx=10, pady=5)
+        
+        self.btn_start = ctk.CTkButton(controls, text="▶ Bật Server", fg_color="#28a745", hover_color="#218838", command=self.start_server)
+        self.btn_start.pack(side="left", padx=5)
+        
+        self.btn_stop = ctk.CTkButton(controls, text="⏹ Tắt Server", fg_color="#dc3545", hover_color="#c82333", command=self.stop_server, state="disabled")
+        self.btn_stop.pack(side="left", padx=5)
+        
+        ctk.CTkButton(controls, text="📁 Mở Thư Mục", command=self.open_folder).pack(side="left", padx=5)
+        ctk.CTkButton(controls, text="🌐 Lấy IP (Playit)", fg_color="#9C27B0", hover_color="#7B1FA2", command=lambda: webbrowser.open("https://playit.gg/account")).pack(side="left", padx=5)
+        
+        # Console & Khung Log
+        log_frame = ctk.CTkFrame(self)
+        log_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        self.log_box = scrolledtext.ScrolledText(log_frame, bg="#1e1e1e", fg="#00ff00", font=("Consolas", 11))
+        self.log_box.pack(fill="both", expand=True, padx=5, pady=5)
+        
+        cmd_frame = ctk.CTkFrame(self, fg_color="transparent")
+        cmd_frame.pack(fill="x", padx=10, pady=5)
+        ctk.CTkLabel(cmd_frame, text="Lệnh (RCON):").pack(side="left")
+        self.cmd_entry = ctk.CTkEntry(cmd_frame, width=500, font=ctk.CTkFont(family="Consolas"))
+        self.cmd_entry.pack(side="left", padx=10)
+        self.cmd_entry.bind("<Return>", lambda e: self.send_command())
+        ctk.CTkButton(cmd_frame, text="Gửi", width=60, command=self.send_command).pack(side="left")
+        
+        # Hiệu năng
+        perf_frame = ctk.CTkFrame(self, fg_color="transparent")
+        perf_frame.pack(fill="x", padx=10, pady=(0, 10))
+        
+        ctk.CTkLabel(perf_frame, text="CPU:").pack(side="left", padx=5)
+        self.cpu_bar = ctk.CTkProgressBar(perf_frame, width=200)
+        self.cpu_bar.set(0)
+        self.cpu_bar.pack(side="left", padx=5)
+        self.lbl_cpu = ctk.CTkLabel(perf_frame, text="0%")
+        self.lbl_cpu.pack(side="left", padx=(0, 20))
+        
+        ctk.CTkLabel(perf_frame, text="RAM:").pack(side="left", padx=5)
+        self.ram_bar = ctk.CTkProgressBar(perf_frame, width=200)
+        self.ram_bar.set(0)
+        self.ram_bar.pack(side="left", padx=5)
+        self.lbl_ram = ctk.CTkLabel(perf_frame, text="0%")
+        self.lbl_ram.pack(side="left", padx=5)
+
+    def log(self, message):
+        def _log():
+            self.log_box.insert("end", message + "\n")
+            self.log_box.see("end")
+        self.after(0, _log)
+        
+    def open_folder(self):
+        os.startfile(self.instance_dir)
+        
+    def generate_compose(self):
+        content = COMPOSE_TEMPLATE.format(
+            server_id=self.server_id,
+            server_type=self.profile['type'],
+            server_version=self.profile['version'],
+            port=self.profile['port']
+        )
+        with open(os.path.join(self.instance_dir, "docker-compose.yml"), "w", encoding="utf-8") as f:
+            f.write(content)
+
+    def start_server(self):
+        self.btn_start.configure(state="disabled")
+        self.generate_compose()
+        self.log("Đang khởi động Server qua Docker Compose...")
+        
+        def run_compose():
+            try:
+                process = subprocess.Popen(["docker-compose", "up", "-d"], cwd=self.instance_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
+                stdout, stderr = process.communicate()
+                if process.returncode == 0:
+                    self.log("Khởi động thành công! Server đang chạy ngầm.")
+                    self.after(0, lambda: self.btn_stop.configure(state="normal"))
+                    
+                    if not self.watchdog_running:
+                        self.watchdog_running = True
+                        threading.Thread(target=self.watchdog_thread, daemon=True).start()
+                        threading.Thread(target=self.playit_scanner_thread, daemon=True).start()
+                else:
+                    self.log(f"Lỗi: {stderr}")
+                    self.after(0, lambda: self.btn_start.configure(state="normal"))
+            except Exception as e:
+                self.log(f"Lỗi hệ thống: {e}")
+                self.after(0, lambda: self.btn_start.configure(state="normal"))
+                
+        threading.Thread(target=run_compose, daemon=True).start()
+
+    def playit_scanner_thread(self):
+        self.log("[Mạng] Đang quét link Playit...")
+        time.sleep(5)
+        try:
+            process = subprocess.Popen(["docker", "logs", "-f", self.playit_container], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
+            for line in process.stdout:
+                if not self.watchdog_running: break
+                if "https://playit.gg/claim/" in line:
+                    start = line.find("https://playit.gg/claim/")
+                    end = line.find(" ", start)
+                    link = line[start:end].strip() if end != -1 else line[start:].strip()
+                    
+                    if link not in self.claimed_links:
+                        self.claimed_links.add(link)
+                        self.log(f"\n[MẠNG] Đã bắt được Link xác thực Playit! Mở trình duyệt...\n👉 {link}\n")
+                        webbrowser.open(link)
+        except Exception:
+            pass
+
+    def stop_server(self):
+        self.btn_stop.configure(state="disabled")
+        self.log("Đang lưu game và tắt máy chủ...")
+        
+        def run_stop():
+            try:
+                subprocess.run(["docker", "exec", "-i", self.container_name, "rcon-cli", "--password", RCON_PASSWORD, "save-all"], capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
+                time.sleep(3)
+                process = subprocess.Popen(["docker-compose", "stop"], cwd=self.instance_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
+                process.communicate()
+                self.log("Máy chủ đã được tắt an toàn.")
+            except Exception as e:
+                self.log(f"Lỗi: {e}")
+            finally:
+                self.watchdog_running = False
+                self.after(0, lambda: self.btn_start.configure(state="normal"))
+                self.after(0, lambda: self.cpu_bar.set(0))
+                self.after(0, lambda: self.ram_bar.set(0))
+                self.after(0, lambda: self.lbl_cpu.configure(text="0%"))
+                self.after(0, lambda: self.lbl_ram.configure(text="0%"))
+                
+        threading.Thread(target=run_stop, daemon=True).start()
+
+    def send_command(self):
+        cmd = self.cmd_entry.get().strip()
+        if not cmd: return
+        if cmd.startswith("/"): cmd = cmd[1:]
+        self.cmd_entry.delete(0, 'end')
+        self.log(f"> /{cmd}")
+        
+        def run_cmd():
+            try:
+                res = subprocess.run(["docker", "exec", "-i", self.container_name, "rcon-cli", "--password", RCON_PASSWORD, cmd], capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
+                if res.stdout: self.log(f"[Console] {res.stdout.strip()}")
+            except Exception as e:
+                self.log(f"Không thể gửi lệnh: {e}")
+                
+        threading.Thread(target=run_cmd, daemon=True).start()
+
+    def watchdog_thread(self):
+        while self.watchdog_running:
+            time.sleep(2)
+            if not self.watchdog_running: break
+            
+            try:
+                stats_res = subprocess.run(["docker", "stats", "--no-stream", "--format", "json", self.container_name], capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
+                if stats_res.stdout:
+                    lines = stats_res.stdout.strip().split("\n")
+                    if lines:
+                        data = json.loads(lines[0])
+                        cpu_perc = float(data.get("CPUPerc", "0%").strip('%'))
+                        mem_perc = float(data.get("MemPerc", "0%").strip('%'))
+                        
+                        def update_perf(c, r):
+                            self.cpu_bar.set(min(c/100, 1.0))
+                            self.lbl_cpu.configure(text=f"{c:.1f}%")
+                            self.ram_bar.set(min(r/100, 1.0))
+                            self.lbl_ram.configure(text=f"{r:.1f}%")
+                        self.after(0, update_perf, cpu_perc, mem_perc)
+            except Exception:
+                pass
+
 
 class MinecraftManagerV2(ctk.CTk):
     def __init__(self):
@@ -24,13 +260,10 @@ class MinecraftManagerV2(ctk.CTk):
         except:
             pass
 
-        # Data initialization
         self.base_dir = "instances"
         self.db_path = "profiles.json"
         os.makedirs(self.base_dir, exist_ok=True)
         self.profiles = self.load_profiles()
-        
-        self.current_profile = None
 
         self.setup_ui()
         self.check_prerequisites()
@@ -65,14 +298,13 @@ class MinecraftManagerV2(ctk.CTk):
         threading.Thread(target=do_check, daemon=True).start()
 
     def setup_ui(self):
-        # Configure Grid Layout (1 row, 2 columns)
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(1, weight=1)
 
         # ============ SIDEBAR ============
         self.sidebar_frame = ctk.CTkFrame(self, width=200, corner_radius=0)
         self.sidebar_frame.grid(row=0, column=0, sticky="nsew")
-        self.sidebar_frame.grid_rowconfigure(5, weight=1) # Spacer
+        self.sidebar_frame.grid_rowconfigure(5, weight=1)
 
         self.logo_label = ctk.CTkLabel(self.sidebar_frame, text="Smart Manager\nV2", font=ctk.CTkFont(size=22, weight="bold"))
         self.logo_label.grid(row=0, column=0, padx=20, pady=(30, 20))
@@ -88,11 +320,6 @@ class MinecraftManagerV2(ctk.CTk):
 
         self.btn_settings = ctk.CTkButton(self.sidebar_frame, text="⚙️ Cài đặt", command=lambda: self.select_frame("settings"))
         self.btn_settings.grid(row=4, column=0, padx=20, pady=10)
-        
-        self.appearance_mode_label = ctk.CTkLabel(self.sidebar_frame, text="Chế độ màu:", anchor="w")
-        self.appearance_mode_label.grid(row=6, column=0, padx=20, pady=(10, 0))
-        self.appearance_mode_optionemenu = ctk.CTkOptionMenu(self.sidebar_frame, values=["Dark", "Light", "System"], command=self.change_appearance_mode_event)
-        self.appearance_mode_optionemenu.grid(row=7, column=0, padx=20, pady=(10, 20))
 
         # ============ MAIN CONTENT FRAMES ============
         self.frames = {}
@@ -111,7 +338,7 @@ class MinecraftManagerV2(ctk.CTk):
         self.server_list_scroll.pack(fill="both", expand=True, padx=20, pady=10)
         self.refresh_server_list()
 
-        # 2. Placeholder for others
+        # 2. Dummy Frames
         for name, title in [("modstore", "Cửa Hàng Mod & Modpacks"), ("clientsync", "Đồng Bộ Mod Client-Side"), ("settings", "Cài Đặt Hệ Thống")]:
             frame = ctk.CTkFrame(self, corner_radius=10, fg_color="transparent")
             lbl = ctk.CTkLabel(frame, text=title, font=ctk.CTkFont(size=24, weight="bold"))
@@ -119,23 +346,17 @@ class MinecraftManagerV2(ctk.CTk):
             ctk.CTkLabel(frame, text="Tính năng đang được phát triển...").pack(pady=10)
             self.frames[name] = frame
 
-        # Bật tab mặc định
         self.select_frame("dashboard")
-
-    def change_appearance_mode_event(self, new_appearance_mode: str):
-        ctk.set_appearance_mode(new_appearance_mode)
 
     def select_frame(self, name):
         for f in self.frames.values():
             f.grid_forget()
             
-        # Reset buttons color
         self.btn_dashboard.configure(fg_color=["#3B8ED0", "#1F6AA5"] if name == "dashboard" else "transparent")
         self.btn_modstore.configure(fg_color=["#3B8ED0", "#1F6AA5"] if name == "modstore" else "transparent")
         self.btn_clientsync.configure(fg_color=["#3B8ED0", "#1F6AA5"] if name == "clientsync" else "transparent")
         self.btn_settings.configure(fg_color=["#3B8ED0", "#1F6AA5"] if name == "settings" else "transparent")
         
-        # Show selected frame
         self.frames[name].grid(row=0, column=1, sticky="nsew", padx=20, pady=20)
 
     def refresh_server_list(self):
@@ -160,9 +381,13 @@ class MinecraftManagerV2(ctk.CTk):
             btn_frame = ctk.CTkFrame(card, fg_color="transparent")
             btn_frame.pack(side="right", padx=15, pady=15)
             
-            ctk.CTkButton(btn_frame, text="▶ Khởi động", width=100, fg_color="#28a745", hover_color="#218838").pack(side="left", padx=5)
-            ctk.CTkButton(btn_frame, text="⚙️ Quản lý", width=100).pack(side="left", padx=5)
+            # Start and Manage combined into "Quản lý"
+            ctk.CTkButton(btn_frame, text="⚙️ Quản Lý Server", width=120, fg_color="#007bff", hover_color="#0056b3", command=lambda i=s_id: self.open_server_manager(i)).pack(side="left", padx=5)
             ctk.CTkButton(btn_frame, text="🗑 Xóa", width=80, fg_color="#dc3545", hover_color="#c82333", command=lambda i=s_id: self.delete_server(i)).pack(side="left", padx=5)
+
+    def open_server_manager(self, server_id):
+        profile = self.profiles[server_id]
+        ServerManagerWindow(self, server_id, profile, self.base_dir)
 
     def create_server_dialog(self):
         dialog = ctk.CTkToplevel(self)
@@ -185,7 +410,7 @@ class MinecraftManagerV2(ctk.CTk):
         
         ctk.CTkLabel(dialog, text="Cổng (Port) Minecraft:").pack(pady=(15, 5), padx=20, anchor="w")
         port_entry = ctk.CTkEntry(dialog, width=300)
-        port_entry.insert(0, str(25565 + len(self.profiles))) # Auto increment port
+        port_entry.insert(0, str(25565 + len(self.profiles))) 
         port_entry.pack(padx=20, anchor="w")
         
         def save():
