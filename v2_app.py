@@ -582,13 +582,32 @@ class MinecraftManagerV2(ctk.CTk):
         
         def run_dl():
             try:
+                loader = profile["type"].lower()
+                mc_ver = profile["version"]
+                
+                # Xác định Loader
+                loaders_arr = '[]'
+                if loader == "paper": loaders_arr = '["paper", "spigot", "purpur"]'
+                elif loader in ["fabric", "forge"]: loaders_arr = f'["{loader}"]'
+                
+                query_params = []
+                if loaders_arr != '[]':
+                    query_params.append(f'loaders={urllib.parse.quote(loaders_arr)}')
+                if mc_ver and mc_ver != "LATEST":
+                    query_params.append(f'game_versions={urllib.parse.quote(f\'["{mc_ver}"]\')}')
+                    
+                query_str = "&".join(query_params)
                 url = f"https://api.modrinth.com/v2/project/{proj['project_id']}/version"
+                if query_str:
+                    url += f"?{query_str}"
+                    
                 req = urllib.request.Request(url, headers={'User-Agent': 'MinecraftSmartManager/2.0'})
                 with urllib.request.urlopen(req, context=ssl_ctx) as res:
                     versions = json.loads(res.read().decode())
                     
                 if not versions:
-                    self.after(0, lambda: messagebox.showerror("Lỗi", "Không tìm thấy file nào khả dụng!"))
+                    err_msg = f"Không tìm thấy file Mod này cho bản {mc_ver} ({loader}). Bạn thử cài bản khác nhé!"
+                    self.after(0, lambda: messagebox.showerror("Lỗi tương thích", err_msg))
                     return
                     
                 file_info = versions[0]["files"][0]
