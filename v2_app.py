@@ -7,13 +7,22 @@ import shutil
 import time
 import webbrowser
 import re
+import urllib.request
+import urllib.parse
+import ssl
 from tkinter import messagebox, scrolledtext
+
+# Cấu hình SSL bỏ qua lỗi trên Windows cũ
+ssl_ctx = ssl.create_default_context()
+ssl_ctx.check_hostname = False
+ssl_ctx.verify_mode = ssl.CERT_NONE
 
 # Configuration
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
 RCON_PASSWORD = "super_secret_rcon_password_123"
+MAX_EMPTY_TIME = 20
 
 COMPOSE_TEMPLATE = """services:
   mc-server:
@@ -62,6 +71,7 @@ class ServerManagerWindow(ctk.CTkToplevel):
         self.after(200, lambda: self.attributes("-topmost", False))
         
         self.watchdog_running = False
+        self.empty_time = 0
         self.claimed_links = set()
         
         self.setup_ui()
@@ -224,10 +234,13 @@ class ServerManagerWindow(ctk.CTkToplevel):
         threading.Thread(target=run_cmd, daemon=True).start()
 
     def watchdog_thread(self):
+        last_check = time.time()
+        self.empty_time = 0
         while self.watchdog_running:
             time.sleep(2)
             if not self.watchdog_running: break
             
+            # Update CPU/RAM
             try:
                 stats_res = subprocess.run(["docker", "stats", "--no-stream", "--format", "json", self.container_name], capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
                 if stats_res.stdout:
@@ -246,6 +259,28 @@ class ServerManagerWindow(ctk.CTkToplevel):
             except Exception:
                 pass
 
+            # Check Players every 60s
+            curr = time.time()
+            if curr - last_check >= 60:
+                last_check = curr
+                try:
+                    res = subprocess.run(["docker", "exec", "-i", self.container_name, "rcon-cli", "--password", RCON_PASSWORD, "list"], capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
+                    out = res.stdout.strip()
+                    if "players online" in out.lower() or "online:" in out.lower():
+                        match = re.search(r'(?:There are |online: )(\d+)', out, re.IGNORECASE)
+                        players = int(match.group(1)) if match else 0
+                        
+                        if players == 0:
+                            self.empty_time += 1
+                            self.log(f"[Watchdog] Server đang trống ({self.empty_time}/{MAX_EMPTY_TIME} phút).")
+                            if self.empty_time >= MAX_EMPTY_TIME:
+                                self.log("[Watchdog] Đã quá thời gian chờ, tiến hành Auto-Stop!")
+                                self.stop_server()
+                                break
+                        else:
+                            self.empty_time = 0
+                except Exception:
+                    pass
 
 class MinecraftManagerV2(ctk.CTk):
     def __init__(self):
@@ -338,13 +373,21 @@ class MinecraftManagerV2(ctk.CTk):
         self.server_list_scroll.pack(fill="both", expand=True, padx=20, pady=10)
         self.refresh_server_list()
 
-        # 2. Dummy Frames
-        for name, title in [("modstore", "Cửa Hàng Mod & Modpacks"), ("clientsync", "Đồng Bộ Mod Client-Side"), ("settings", "Cài Đặt Hệ Thống")]:
-            frame = ctk.CTkFrame(self, corner_radius=10, fg_color="transparent")
-            lbl = ctk.CTkLabel(frame, text=title, font=ctk.CTkFont(size=24, weight="bold"))
-            lbl.pack(pady=20, padx=20, anchor="w")
-            ctk.CTkLabel(frame, text="Tính năng đang được phát triển...").pack(pady=10)
-            self.frames[name] = frame
+        # 2. Modstore Frame
+        self.modstore_frame = ctk.CTkFrame(self, corner_radius=10, fg_color="transparent")
+        self.frames["modstore"] = self.modstore_frame
+        self.setup_modstore()
+
+        # 3. Client Sync Frame
+        self.clientsync_frame = ctk.CTkFrame(self, corner_radius=10, fg_color="transparent")
+        self.frames["clientsync"] = self.clientsync_frame
+        self.setup_clientsync()
+
+        # 4. Dummy Settings Frame
+        self.settings_frame = ctk.CTkFrame(self, corner_radius=10, fg_color="transparent")
+        self.frames["settings"] = self.settings_frame
+        ctk.CTkLabel(self.settings_frame, text="Cài Đặt Hệ Thống", font=ctk.CTkFont(size=24, weight="bold")).pack(pady=20, padx=20, anchor="w")
+        ctk.CTkLabel(self.settings_frame, text="Phiên bản: 2.0 (Modern Engine)\nCác cài đặt nâng cao sẽ được thêm trong tương lai.").pack(pady=10)
 
         self.select_frame("dashboard")
 
@@ -358,7 +401,13 @@ class MinecraftManagerV2(ctk.CTk):
         self.btn_settings.configure(fg_color=["#3B8ED0", "#1F6AA5"] if name == "settings" else "transparent")
         
         self.frames[name].grid(row=0, column=1, sticky="nsew", padx=20, pady=20)
+        
+        if name == "modstore":
+            self.refresh_modstore_servers()
+        if name == "clientsync":
+            self.refresh_sync_servers()
 
+    # ================= DASHBOARD LOGIC =================
     def refresh_server_list(self):
         for widget in self.server_list_scroll.winfo_children():
             widget.destroy()
@@ -381,7 +430,6 @@ class MinecraftManagerV2(ctk.CTk):
             btn_frame = ctk.CTkFrame(card, fg_color="transparent")
             btn_frame.pack(side="right", padx=15, pady=15)
             
-            # Start and Manage combined into "Quản lý"
             ctk.CTkButton(btn_frame, text="⚙️ Quản Lý Server", width=120, fg_color="#007bff", hover_color="#0056b3", command=lambda i=s_id: self.open_server_manager(i)).pack(side="left", padx=5)
             ctk.CTkButton(btn_frame, text="🗑 Xóa", width=80, fg_color="#dc3545", hover_color="#c82333", command=lambda i=s_id: self.delete_server(i)).pack(side="left", padx=5)
 
@@ -405,7 +453,7 @@ class MinecraftManagerV2(ctk.CTk):
         type_menu.pack(padx=20, anchor="w")
         
         ctk.CTkLabel(dialog, text="Phiên bản:").pack(pady=(15, 5), padx=20, anchor="w")
-        version_entry = ctk.CTkEntry(dialog, width=300, placeholder_text="Ví dụ: 1.20.4, LATEST")
+        version_entry = ctk.CTkEntry(dialog, width=300, placeholder_text="Ví dụ: 1.20.4, 1.21.1")
         version_entry.pack(padx=20, anchor="w")
         
         ctk.CTkLabel(dialog, text="Cổng (Port) Minecraft:").pack(pady=(15, 5), padx=20, anchor="w")
@@ -416,12 +464,10 @@ class MinecraftManagerV2(ctk.CTk):
         def save():
             name = name_entry.get().strip()
             if not name: return
-            
             s_id = name.lower().replace(" ", "_")
             if s_id in self.profiles:
                 messagebox.showerror("Lỗi", "Tên máy chủ này đã tồn tại!")
                 return
-                
             self.profiles[s_id] = {
                 "name": name,
                 "type": type_var.get(),
@@ -429,7 +475,6 @@ class MinecraftManagerV2(ctk.CTk):
                 "port": port_entry.get().strip() or "25565",
                 "created_at": time.time()
             }
-            
             os.makedirs(os.path.join(self.base_dir, s_id, "data"), exist_ok=True)
             self.save_profiles()
             self.refresh_server_list()
@@ -438,14 +483,173 @@ class MinecraftManagerV2(ctk.CTk):
         ctk.CTkButton(dialog, text="Tạo Mới", command=save, fg_color="#28a745", hover_color="#218838").pack(pady=30)
 
     def delete_server(self, s_id):
-        if messagebox.askyesno("Xác nhận", f"Bạn có chắc chắn muốn xóa máy chủ '{self.profiles[s_id]['name']}' không?\n(Dữ liệu trong thư mục sẽ bị xóa vĩnh viễn)"):
+        if messagebox.askyesno("Xác nhận", f"Bạn có chắc chắn muốn xóa '{self.profiles[s_id]['name']}' không?"):
             path = os.path.join(self.base_dir, s_id)
             if os.path.exists(path):
                 shutil.rmtree(path, ignore_errors=True)
-                
             del self.profiles[s_id]
             self.save_profiles()
             self.refresh_server_list()
+
+    # ================= MODSTORE LOGIC =================
+    def setup_modstore(self):
+        ctk.CTkLabel(self.modstore_frame, text="Cửa Hàng Mod & Plugins (Modrinth)", font=ctk.CTkFont(size=24, weight="bold")).pack(pady=(20, 10), padx=20, anchor="w")
+        
+        top_frame = ctk.CTkFrame(self.modstore_frame, fg_color="transparent")
+        top_frame.pack(fill="x", padx=20, pady=5)
+        
+        ctk.CTkLabel(top_frame, text="Cài đặt vào Server:").pack(side="left", padx=(0,10))
+        self.mod_server_var = ctk.StringVar(value="")
+        self.mod_server_menu = ctk.CTkOptionMenu(top_frame, variable=self.mod_server_var, values=["Trống"])
+        self.mod_server_menu.pack(side="left", padx=10)
+        
+        search_frame = ctk.CTkFrame(self.modstore_frame, fg_color="transparent")
+        search_frame.pack(fill="x", padx=20, pady=10)
+        
+        self.mod_search_entry = ctk.CTkEntry(search_frame, width=400, placeholder_text="Gõ tên Mod/Plugin (Vd: ClearLag, SkinRestorer)...")
+        self.mod_search_entry.pack(side="left", padx=(0,10))
+        self.mod_search_entry.bind("<Return>", lambda e: self.do_mod_search())
+        
+        ctk.CTkButton(search_frame, text="🔍 Tìm Kiếm", command=self.do_mod_search).pack(side="left")
+        
+        self.mod_results_scroll = ctk.CTkScrollableFrame(self.modstore_frame, corner_radius=10)
+        self.mod_results_scroll.pack(fill="both", expand=True, padx=20, pady=10)
+        
+        self.mod_projects_cache = []
+
+    def refresh_modstore_servers(self):
+        vals = [p['name'] for p in self.profiles.values()]
+        if not vals: vals = ["Chưa có Server"]
+        self.mod_server_menu.configure(values=vals)
+        self.mod_server_var.set(vals[0])
+
+    def do_mod_search(self):
+        query = self.mod_search_entry.get().strip()
+        if not query: return
+        
+        for w in self.mod_results_scroll.winfo_children(): w.destroy()
+        ctk.CTkLabel(self.mod_results_scroll, text="Đang tìm kiếm...").pack(pady=20)
+        
+        def run_search():
+            try:
+                url = f"https://api.modrinth.com/v2/search?query={urllib.parse.quote(query)}&limit=15"
+                req = urllib.request.Request(url, headers={'User-Agent': 'MinecraftSmartManager/2.0'})
+                with urllib.request.urlopen(req, context=ssl_ctx) as res:
+                    data = json.loads(res.read().decode())
+                
+                self.mod_projects_cache = data.get("hits", [])
+                self.after(0, self.render_mod_results)
+            except Exception as e:
+                self.after(0, lambda: self.render_mod_error(str(e)))
+                
+        threading.Thread(target=run_search, daemon=True).start()
+        
+    def render_mod_error(self, err):
+        for w in self.mod_results_scroll.winfo_children(): w.destroy()
+        ctk.CTkLabel(self.mod_results_scroll, text=f"Lỗi: {err}", text_color="red").pack(pady=20)
+        
+    def render_mod_results(self):
+        for w in self.mod_results_scroll.winfo_children(): w.destroy()
+        if not self.mod_projects_cache:
+            ctk.CTkLabel(self.mod_results_scroll, text="Không tìm thấy Mod/Plugin nào.").pack(pady=20)
+            return
+            
+        for proj in self.mod_projects_cache:
+            card = ctk.CTkFrame(self.mod_results_scroll, corner_radius=8, fg_color="#2b2b2b")
+            card.pack(fill="x", padx=5, pady=5)
+            
+            info = ctk.CTkFrame(card, fg_color="transparent")
+            info.pack(side="left", fill="both", expand=True, padx=10, pady=10)
+            
+            ctk.CTkLabel(info, text=proj.get("title", "Unknown"), font=ctk.CTkFont(size=16, weight="bold")).pack(anchor="w")
+            ctk.CTkLabel(info, text=f"Tác giả: {proj.get('author')} | Lượt tải: {proj.get('downloads')}", text_color="gray").pack(anchor="w")
+            
+            ctk.CTkButton(card, text="⬇ Tải Về", width=80, fg_color="#FF9800", hover_color="#F57C00", command=lambda p=proj: self.download_mod(p)).pack(side="right", padx=15, pady=10)
+
+    def download_mod(self, proj):
+        target_name = self.mod_server_var.get()
+        target_id = None
+        for s_id, data in self.profiles.items():
+            if data['name'] == target_name:
+                target_id = s_id
+                break
+                
+        if not target_id:
+            messagebox.showerror("Lỗi", "Vui lòng chọn một Server hợp lệ để cài đặt!")
+            return
+            
+        profile = self.profiles[target_id]
+        
+        def run_dl():
+            try:
+                url = f"https://api.modrinth.com/v2/project/{proj['project_id']}/version"
+                req = urllib.request.Request(url, headers={'User-Agent': 'MinecraftSmartManager/2.0'})
+                with urllib.request.urlopen(req, context=ssl_ctx) as res:
+                    versions = json.loads(res.read().decode())
+                    
+                if not versions:
+                    self.after(0, lambda: messagebox.showerror("Lỗi", "Không tìm thấy file nào khả dụng!"))
+                    return
+                    
+                file_info = versions[0]["files"][0]
+                dl_url, filename = file_info["url"], file_info["filename"]
+                
+                dest_folder = "plugins" if profile["type"] == "PAPER" else "mods"
+                dest_dir = os.path.join(self.base_dir, target_id, "data", dest_folder)
+                os.makedirs(dest_dir, exist_ok=True)
+                dest_path = os.path.join(dest_dir, filename)
+                
+                dl_req = urllib.request.Request(dl_url, headers={'User-Agent': 'MinecraftSmartManager/2.0'})
+                with urllib.request.urlopen(dl_req, context=ssl_ctx) as res, open(dest_path, 'wb') as f:
+                    f.write(res.read())
+                    
+                self.after(0, lambda: messagebox.showinfo("Thành công", f"Đã cài đặt {filename} vào thư mục {dest_folder} của máy chủ {profile['name']}!"))
+            except Exception as e:
+                self.after(0, lambda: messagebox.showerror("Lỗi Tải", str(e)))
+                
+        threading.Thread(target=run_dl, daemon=True).start()
+        messagebox.showinfo("Đang tải", f"Đang bắt đầu tải {proj['title']} ngầm, vui lòng đợi thông báo thành công...")
+
+    # ================= CLIENT SYNC LOGIC =================
+    def setup_clientsync(self):
+        ctk.CTkLabel(self.clientsync_frame, text="Đóng gói Mod cho Bạn Bè (Client Sync)", font=ctk.CTkFont(size=24, weight="bold")).pack(pady=(20, 10), padx=20, anchor="w")
+        ctk.CTkLabel(self.clientsync_frame, text="Tính năng này tự động nén thư mục 'mods' của Server thành file ZIP, \ngiúp bạn dễ dàng gửi cho bạn bè để họ chép vào thư mục .minecraft của họ.").pack(padx=20, anchor="w", pady=10)
+        
+        top_frame = ctk.CTkFrame(self.clientsync_frame, fg_color="transparent")
+        top_frame.pack(fill="x", padx=20, pady=5)
+        
+        ctk.CTkLabel(top_frame, text="Chọn Server:").pack(side="left", padx=(0,10))
+        self.sync_server_var = ctk.StringVar(value="")
+        self.sync_server_menu = ctk.CTkOptionMenu(top_frame, variable=self.sync_server_var, values=["Trống"])
+        self.sync_server_menu.pack(side="left", padx=10)
+        
+        ctk.CTkButton(self.clientsync_frame, text="📦 Xuất ra File ZIP", fg_color="#E91E63", hover_color="#C2185B", font=ctk.CTkFont(weight="bold"), command=self.export_client_mods).pack(pady=30, padx=20, anchor="w")
+
+    def refresh_sync_servers(self):
+        vals = [p['name'] for p in self.profiles.items() if p[1]['type'] in ['FORGE', 'FABRIC']] # Chỉ mod mới cần sync client
+        if not vals: vals = ["Không có Server FORGE/FABRIC nào"]
+        self.sync_server_menu.configure(values=vals)
+        self.sync_server_var.set(vals[0])
+        
+    def export_client_mods(self):
+        target_name = self.sync_server_var.get()
+        target_id = None
+        for s_id, data in self.profiles.items():
+            if data['name'] == target_name:
+                target_id = s_id
+                break
+                
+        if not target_id: return
+        
+        mods_dir = os.path.join(self.base_dir, target_id, "data", "mods")
+        if not os.path.exists(mods_dir) or not os.listdir(mods_dir):
+            messagebox.showwarning("Trống", f"Thư mục mods của {target_name} đang trống!")
+            return
+            
+        zip_name = f"Modpack_Client_{target_id}_{int(time.time())}"
+        shutil.make_archive(zip_name, 'zip', mods_dir)
+        messagebox.showinfo("Thành công", f"Đã đóng gói thành công file:\n{zip_name}.zip\n\nHãy gửi file này cho bạn bè nhé!")
+        os.startfile(os.getcwd())
 
 if __name__ == "__main__":
     app = MinecraftManagerV2()
