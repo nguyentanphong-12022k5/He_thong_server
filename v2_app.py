@@ -594,7 +594,8 @@ class MinecraftManagerV2(ctk.CTk):
                 if loaders_arr != '[]':
                     query_params.append(f'loaders={urllib.parse.quote(loaders_arr)}')
                 if mc_ver and mc_ver != "LATEST":
-                    query_params.append(f'game_versions={urllib.parse.quote(f\'["{mc_ver}"]\')}')
+                    ver_json = f'["{mc_ver}"]'
+                    query_params.append(f'game_versions={urllib.parse.quote(ver_json)}')
                     
                 query_str = "&".join(query_params)
                 url = f"https://api.modrinth.com/v2/project/{proj['project_id']}/version"
