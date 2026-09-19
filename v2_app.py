@@ -58,15 +58,8 @@ class MinecraftManagerV2(ctk.CTk):
             except FileNotFoundError:
                 issues.append("- Chưa cài đặt Docker Desktop. Hệ thống yêu cầu Docker để chạy.")
                 
-            try:
-                wsl = subprocess.run(["wsl", "-l", "-v"], capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
-                if wsl.returncode == 0 and "docker-desktop" not in wsl.stdout:
-                    issues.append("- WSL2 Backend chưa được cấu hình cho Docker.")
-            except FileNotFoundError:
-                pass # Not all windows machines have wsl command easily accessible, or it might be older windows.
-                
             if issues:
-                msg = "Phát hiện lỗi môi trường:\n" + "\n".join(issues)
+                msg = "Phát hiện lỗi môi trường:\n" + "\n".join(issues) + "\n\n(Vui lòng lên Google tải Docker Desktop nếu bạn chưa có!)"
                 self.after(0, lambda: messagebox.showwarning("Thiếu Điều Kiện", msg))
         
         threading.Thread(target=do_check, daemon=True).start()
